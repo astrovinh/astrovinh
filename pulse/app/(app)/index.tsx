@@ -1,11 +1,22 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../store/auth';
 
 export default function HomeScreen() {
+  const session = useAuthStore((s) => s.session);
+
+  async function signOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) Alert.alert('Sign Out Error', error.message);
+    // onAuthStateChange fires SIGNED_OUT → AuthGuard redirects to (auth)/login
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>You're in!</Text>
-      <Pressable style={styles.button} onPress={() => supabase.auth.signOut()}>
+      <Text style={styles.greeting}>
+        Hello, {session?.user.email ?? 'User'}
+      </Text>
+      <Pressable style={styles.button} onPress={signOut}>
         <Text style={styles.buttonText}>Sign Out</Text>
       </Pressable>
     </View>
@@ -13,10 +24,13 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: 32 },
+  container: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff',
+  },
+  greeting: { fontSize: 18, marginBottom: 32, color: '#333' },
   button: {
-    backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 12,
+    backgroundColor: '#ef4444', borderRadius: 8,
+    paddingHorizontal: 24, paddingVertical: 12,
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

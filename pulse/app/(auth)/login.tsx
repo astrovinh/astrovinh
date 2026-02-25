@@ -1,5 +1,6 @@
-import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,6 +23,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const redirectTo = makeRedirectUri({ scheme: 'pulse' });
+
   async function signInWithEmail() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -31,16 +34,34 @@ export default function LoginScreen() {
 
   async function signInWithOAuth(provider: 'google' | 'apple') {
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: 'pulse://auth/callback' },
-    });
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else if (data?.url) {
-      await WebBrowser.openAuthSessionAsync(data.url, 'pulse://auth/callback');
+    try {
+      // Step 1: get provider URL without opening browser
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+
+      if (error || !data.url) {
+        Alert.alert('OAuth Error', error?.message ?? 'No URL returned');
+        return;
+      }
+
+      // Step 2: open in-app browser and wait for redirect
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+      if (result.type !== 'success') return; // user cancelled
+
+      // Step 3: exchange PKCE code for session
+      const url = new URL(result.url);
+      const code = url.searchParams.get('code');
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) Alert.alert('Session Error', exchangeError.message);
+        // onAuthStateChange fires → AuthGuard redirects to (app)
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -56,6 +77,7 @@ export default function LoginScreen() {
         placeholderTextColor="#999"
         autoCapitalize="none"
         keyboardType="email-address"
+        textContentType="emailAddress"
         value={email}
         onChangeText={setEmail}
       />
@@ -64,6 +86,7 @@ export default function LoginScreen() {
         placeholder="Password"
         placeholderTextColor="#999"
         secureTextEntry
+        textContentType="password"
         value={password}
         onChangeText={setPassword}
       />
@@ -88,13 +111,15 @@ export default function LoginScreen() {
         <Text style={[styles.buttonText, styles.outlineText]}>Continue with Google</Text>
       </Pressable>
 
-      <Pressable
-        style={[styles.button, styles.appleButton]}
-        onPress={() => signInWithOAuth('apple')}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>Continue with Apple</Text>
-      </Pressable>
+      {Platform.OS === 'ios' && (
+        <Pressable
+          style={[styles.button, styles.appleButton]}
+          onPress={() => signInWithOAuth('apple')}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>Continue with Apple</Text>
+        </Pressable>
+      )}
 
       <Pressable onPress={() => router.push('/(auth)/signup')} style={styles.link}>
         <Text style={styles.linkText}>
