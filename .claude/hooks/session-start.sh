@@ -33,4 +33,16 @@ else
   apt-get install -y watchman
 fi
 
+# ── VS Code ───────────────────────────────────────────────────────────────────
+if command -v code &>/dev/null; then
+  echo "✓ VS Code $(code --version --no-sandbox --user-data-dir=/tmp/vscode-root 2>/dev/null | head -1 || dpkg -l code 2>/dev/null | awk '/^ii/{print $3}') already installed"
+else
+  echo "==> Installing VS Code..."
+  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg
+  echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+    > /etc/apt/sources.list.d/vscode.list
+  apt-get update -qq
+  apt-get install -y code
+fi
+
 echo "==> Vibe coding environment ready!"
