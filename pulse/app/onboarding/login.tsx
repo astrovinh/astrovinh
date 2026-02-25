@@ -35,7 +35,6 @@ export default function LoginScreen() {
   async function signInWithOAuth(provider: 'google' | 'apple') {
     setLoading(true);
     try {
-      // Step 1: get provider URL without opening browser
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: { redirectTo, skipBrowserRedirect: true },
@@ -46,18 +45,15 @@ export default function LoginScreen() {
         return;
       }
 
-      // Step 2: open in-app browser and wait for redirect
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
-      if (result.type !== 'success') return; // user cancelled
+      if (result.type !== 'success') return;
 
-      // Step 3: exchange PKCE code for session
       const url = new URL(result.url);
       const code = url.searchParams.get('code');
       if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) Alert.alert('Session Error', exchangeError.message);
-        // onAuthStateChange fires → AuthGuard redirects to (app)
       }
     } finally {
       setLoading(false);
@@ -121,7 +117,7 @@ export default function LoginScreen() {
         </Pressable>
       )}
 
-      <Pressable onPress={() => router.push('/(auth)/signup')} style={styles.link}>
+      <Pressable onPress={() => router.push('/onboarding/signup')} style={styles.link}>
         <Text style={styles.linkText}>
           Don't have an account?{' '}
           <Text style={styles.linkBold}>Sign up</Text>

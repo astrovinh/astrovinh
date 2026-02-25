@@ -25,7 +25,7 @@ export default function SignupScreen() {
       Alert.alert('Sign Up Error', error.message);
     } else {
       Alert.alert('Check your email', 'We sent you a confirmation link.');
-      router.replace('/(auth)/login');
+      router.replace('/onboarding/login');
     }
     setLoading(false);
   }

@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PostHogProvider } from 'posthog-react-native';
 import { posthog } from '../lib/posthog';
 import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../store/auth';
+import { useAuthStore } from '../stores/authStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,11 +41,11 @@ function AuthGuard() {
   // (navigationState.key is undefined until then) and session is known.
   useEffect(() => {
     if (!navigationState?.key || !initialized) return;
-    const inAuthGroup = segments[0] === '(auth)';
-    if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
-      router.replace('/(app)');
+    const inOnboarding = segments[0] === 'onboarding';
+    if (!session && !inOnboarding) {
+      router.replace('/onboarding');
+    } else if (session && inOnboarding) {
+      router.replace('/(tabs)');
     }
   }, [session, initialized, segments, navigationState?.key]);
 
