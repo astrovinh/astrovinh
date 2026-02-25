@@ -3,6 +3,8 @@ import { Slot, SplashScreen, useRootNavigationState, useRouter, useSegments } fr
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { PostHogProvider } from 'posthog-react-native';
+import { posthog } from '../lib/posthog';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/auth';
 
@@ -52,12 +54,14 @@ function AuthGuard() {
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <AuthGuard />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <PostHogProvider client={posthog} autocapture>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaProvider>
+            <AuthGuard />
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </PostHogProvider>
   );
 }
