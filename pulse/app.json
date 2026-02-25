@@ -26,6 +26,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "scheme": "pulse",
     "plugins": [
       "expo-router",
       "expo-web-browser"
