@@ -1,8 +1,24 @@
-const { withDangerousMod } = require('@expo/config-plugins');
+const { withDangerousMod, withXcodeProject } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
-function withUserScriptSandboxing(config) {
+// Patch main app project (pulse.xcodeproj/project.pbxproj)
+function withMainProjectSandboxFix(config) {
+  return withXcodeProject(config, (config) => {
+    const project = config.modResults;
+    const buildConfigs = project.pbxXCBuildConfigurationSection();
+    for (const key of Object.keys(buildConfigs)) {
+      const bc = buildConfigs[key];
+      if (bc && typeof bc === 'object' && bc.buildSettings) {
+        bc.buildSettings.ENABLE_USER_SCRIPT_SANDBOXING = 'NO';
+      }
+    }
+    return config;
+  });
+}
+
+// Patch Pods project via Podfile post_install hook
+function withPodsSandboxFix(config) {
   return withDangerousMod(config, [
     'ios',
     async (config) => {
@@ -22,6 +38,12 @@ function withUserScriptSandboxing(config) {
       return config;
     },
   ]);
+}
+
+function withUserScriptSandboxing(config) {
+  config = withMainProjectSandboxFix(config);
+  config = withPodsSandboxFix(config);
+  return config;
 }
 
 module.exports = withUserScriptSandboxing;
