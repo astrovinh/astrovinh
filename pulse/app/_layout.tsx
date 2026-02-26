@@ -13,14 +13,16 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function AuthGuard() {
-  const { session, initialized, setSession, setInitialized } = useAuthStore();
+  const { session, initialized, onboardingComplete, setSession, setInitialized, loadPersistedState } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
 
-  // Subscribe to auth state changes; use INITIAL_SESSION to mark when first
-  // session check is done so we don't redirect before we know the state.
   useEffect(() => {
+    // Load persisted onboarding completion state first so the redirect
+    // logic below has accurate data when INITIAL_SESSION fires.
+    loadPersistedState();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       if (event === 'INITIAL_SESSION') {
@@ -30,24 +32,27 @@ function AuthGuard() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Hide splash screen once we know the auth state.
   useEffect(() => {
     if (initialized) {
       SplashScreen.hideAsync();
     }
   }, [initialized]);
 
-  // Redirect based on auth state — but only after the navigator has mounted
-  // (navigationState.key is undefined until then) and session is known.
   useEffect(() => {
     if (!navigationState?.key || !initialized) return;
+
     const inOnboarding = segments[0] === 'onboarding';
+
     if (!session && !inOnboarding) {
+      // Not authenticated → send to onboarding
       router.replace('/onboarding');
-    } else if (session && inOnboarding) {
+    } else if (session && inOnboarding && onboardingComplete) {
+      // Authenticated AND onboarding done → send to main app
+      // If onboardingComplete is false (mid-onboarding auth at step 13),
+      // we intentionally do nothing so steps 14-15 can complete the flow.
       router.replace('/(tabs)');
     }
-  }, [session, initialized, segments, navigationState?.key]);
+  }, [session, initialized, onboardingComplete, segments, navigationState?.key]);
 
   return <Slot />;
 }
