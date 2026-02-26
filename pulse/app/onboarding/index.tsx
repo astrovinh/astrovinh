@@ -69,7 +69,7 @@ export default function WelcomeScreen() {
         <View style={styles.ctas}>
           <Pressable
             style={styles.primaryBtn}
-            onPress={() => router.push('/onboarding/step2')}
+            onPress={() => router.push('/onboarding/signup')}
           >
             <Text style={styles.primaryBtnText}>Get Started</Text>
           </Pressable>

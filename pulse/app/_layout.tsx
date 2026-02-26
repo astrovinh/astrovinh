@@ -13,21 +13,48 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function AuthGuard() {
-  const { session, initialized, onboardingComplete, setSession, setInitialized, loadPersistedState } = useAuthStore();
+  const {
+    session,
+    profile,
+    initialized,
+    profileLoaded,
+    setSession,
+    setProfile,
+    setInitialized,
+    setProfileLoaded,
+  } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
 
   useEffect(() => {
-    // Load persisted onboarding completion state first so the redirect
-    // logic below has accurate data when INITIAL_SESSION fires.
-    loadPersistedState();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
-      if (event === 'INITIAL_SESSION') {
-        setInitialized(true);
-      }
+
+      (async () => {
+        if (newSession && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')) {
+          const { data } = await supabase
+            .from('users')
+            .select('id, role, name, avatar_url, onboarding_complete')
+            .eq('id', newSession.user.id)
+            .single();
+          setProfile(
+            data
+              ? {
+                  id: data.id,
+                  role: data.role ?? null,
+                  name: data.name ?? null,
+                  avatarUrl: data.avatar_url ?? null,
+                  onboardingComplete: data.onboarding_complete ?? false,
+                }
+              : null
+          );
+        } else if (!newSession) {
+          setProfile(null);
+        }
+        setProfileLoaded(true);
+        if (event === 'INITIAL_SESSION') setInitialized(true);
+      })();
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -39,20 +66,20 @@ function AuthGuard() {
   }, [initialized]);
 
   useEffect(() => {
-    if (!navigationState?.key || !initialized) return;
+    if (!navigationState?.key || !initialized || !profileLoaded) return;
 
     const inOnboarding = segments[0] === 'onboarding';
 
-    if (!session && !inOnboarding) {
-      // Not authenticated → send to onboarding
-      router.replace('/onboarding');
-    } else if (session && inOnboarding && onboardingComplete) {
-      // Authenticated AND onboarding done → send to main app
-      // If onboardingComplete is false (mid-onboarding auth at step 13),
-      // we intentionally do nothing so steps 14-15 can complete the flow.
+    if (!session) {
+      if (!inOnboarding) router.replace('/onboarding');
+    } else if (!profile?.role) {
+      router.replace('/onboarding/role');
+    } else if (!profile.onboardingComplete) {
+      router.replace('/onboarding/profile');
+    } else if (inOnboarding) {
       router.replace('/(tabs)');
     }
-  }, [session, initialized, onboardingComplete, segments, navigationState?.key]);
+  }, [session, initialized, profileLoaded, profile, segments, navigationState?.key]);
 
   return <Slot />;
 }

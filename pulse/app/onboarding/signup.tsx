@@ -11,6 +11,7 @@ import {
   TextInput,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { colors as C } from '../../constants/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -20,12 +21,15 @@ export default function SignupScreen() {
 
   async function signUp() {
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
       Alert.alert('Sign Up Error', error.message);
+    } else if (data.session) {
+      // Email confirm is disabled — session is live, continue to role selection
+      router.replace('/onboarding/role');
     } else {
-      Alert.alert('Check your email', 'We sent you a confirmation link.');
-      router.replace('/onboarding/login');
+      // Email confirm is enabled — show check-email holding screen
+      router.replace('/onboarding/check-email');
     }
     setLoading(false);
   }
@@ -40,7 +44,7 @@ export default function SignupScreen() {
       <TextInput
         style={styles.input}
         placeholder="Email"
-        placeholderTextColor="#999"
+        placeholderTextColor={C.textMuted}
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
@@ -49,7 +53,7 @@ export default function SignupScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
-        placeholderTextColor="#999"
+        placeholderTextColor={C.textMuted}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -57,7 +61,7 @@ export default function SignupScreen() {
 
       <Pressable style={styles.button} onPress={signUp} disabled={loading}>
         {loading
-          ? <ActivityIndicator color="#fff" />
+          ? <ActivityIndicator color={C.white} />
           : <Text style={styles.buttonText}>Create Account</Text>}
       </Pressable>
 
@@ -73,19 +77,19 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff',
+    flex: 1, justifyContent: 'center', padding: 24, backgroundColor: C.bg,
   },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 32, textAlign: 'center' },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 32, textAlign: 'center', color: C.textPrimary },
   input: {
-    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    padding: 14, marginBottom: 12, fontSize: 16, color: '#000',
+    borderWidth: 1, borderColor: C.cardBorder, borderRadius: 8,
+    padding: 14, marginBottom: 12, fontSize: 16, color: C.textPrimary, backgroundColor: C.surface,
   },
   button: {
-    backgroundColor: '#000', borderRadius: 8, padding: 14,
+    backgroundColor: C.coral, borderRadius: 8, padding: 14,
     alignItems: 'center', marginTop: 8,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: C.white, fontSize: 16, fontWeight: '600' },
   link: { marginTop: 24, alignItems: 'center' },
-  linkText: { color: '#666', fontSize: 14 },
-  linkBold: { color: '#000', fontWeight: '600' },
+  linkText: { color: C.textMuted, fontSize: 14 },
+  linkBold: { color: C.textPrimary, fontWeight: '600' },
 });
