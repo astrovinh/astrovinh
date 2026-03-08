@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300,100;9..144,400,80;9..144,500,60;9..144,600,40;9..144,700,30&family=Anybody:wght@300;400;500;600&family=Overpass+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #FBF9F1;
+  --color-foreground: #2D2B26;
+  --color-accent: #D89840;
+  --color-accent-light: #FFF5E6;
+  --color-accent-text: #8B6420;
+  --color-card: #FFFFFF;
+  --color-border: #EBE8DF;
+  --color-muted: #A09B8E;
+  --color-muted-light: #C8C0B4;
+  --font-body: 'Anybody', sans-serif;
+  --font-display: 'Fraunces', serif;
+  --font-mono: 'Overpass Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+}
+
+::selection {
+  background: #D8984040;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+input::placeholder {
+  color: #B0A898;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes catWave {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(6deg); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
