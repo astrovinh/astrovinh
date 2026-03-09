@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useLanguage } from "@/i18n/LanguageContext";
 
 interface WaitlistFormProps {
+  onSubmit?: () => void;
   successEmoji?: string;
   successMessage?: string;
   successSub?: string;
 }
 
 export default function WaitlistForm({
+  onSubmit,
   successEmoji = "😸",
   successMessage,
   successSub,
@@ -32,16 +34,17 @@ export default function WaitlistForm({
     }
 
     setSubmitted(true);
+    onSubmit?.();
   };
 
   if (submitted) {
     return (
-      <div className="flex flex-col items-center gap-1.5 animate-[scaleIn_0.4s_ease]">
-        <span className="text-[32px]">{successEmoji}</span>
-        <span className="text-[15px] font-display font-semibold text-accent">
+      <div style={{ animation: "scaleIn 0.4s ease", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 32 }}>{successEmoji}</span>
+        <span style={{ fontSize: 15, fontFamily: "var(--d)", fontWeight: 600, color: "var(--accent)" }}>
           {successMessage || t.waitlist.success}
         </span>
-        <span className="text-xs text-muted">
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
           {successSub || t.waitlist.successSub}
         </span>
       </div>
@@ -49,18 +52,20 @@ export default function WaitlistForm({
   }
 
   return (
-    <div className="flex gap-2 max-w-[420px] mx-auto bg-card rounded-[14px] p-[5px] border border-border">
+    <div style={{ display: "flex", gap: 8, maxWidth: 420, margin: "0 auto", background: "var(--card)", borderRadius: 14, padding: 5, border: "1px solid var(--border)" }}>
       <input
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
         placeholder={t.waitlist.placeholder}
-        className="flex-1 bg-transparent border-none text-foreground text-[13px] font-body px-3 py-[11px] outline-none"
+        style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, fontFamily: "var(--b)", padding: "11px 12px", outline: "none" }}
       />
       <button
         onClick={handleSubmit}
-        className="bg-accent text-white border-none rounded-[10px] px-[22px] py-[11px] text-xs font-display font-semibold cursor-pointer transition-transform duration-150 shrink-0 hover:-translate-y-px"
+        style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 22px", fontSize: 12, fontFamily: "var(--d)", fontWeight: 600, cursor: "pointer", transition: "transform 0.15s", flexShrink: 0 }}
+        onMouseEnter={e => ((e.target as HTMLElement).style.transform = "translateY(-1px)")}
+        onMouseLeave={e => ((e.target as HTMLElement).style.transform = "")}
       >
         {t.waitlist.btn}
       </button>

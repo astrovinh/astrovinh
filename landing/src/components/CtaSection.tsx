@@ -6,32 +6,26 @@ import Reveal from "./Reveal";
 
 interface CtaSectionProps {
   count: number;
+  onSubmit: () => void;
 }
 
-export default function CtaSection({ count }: CtaSectionProps) {
+export default function CtaSection({ count, onSubmit }: CtaSectionProps) {
   const { t } = useLanguage();
 
   return (
-    <section id="cta" className="px-8 pt-[60px] pb-[100px] text-center">
+    <section id="cta" style={{ padding: "60px 32px 100px", textAlign: "center" }}>
       <Reveal>
-        <div className="max-w-[520px] mx-auto">
-          {/* Cat with wave animation */}
-          <div className="text-[52px] mb-3.5 animate-[catWave_2s_ease_infinite]">
-            😺
-          </div>
-
-          <h2 className="text-[34px] font-display font-bold leading-[1.15]">
-            {t.cta.h2a}
-            <br />
-            <span className="italic text-accent">{t.cta.h2b}</span>
+        <div style={{ maxWidth: 520, margin: "0 auto" }}>
+          <div style={{ fontSize: 52, marginBottom: 14, animation: "catWave 2s ease infinite" }}>😺</div>
+          <h2 style={{ fontSize: 34, fontFamily: "var(--d)", fontWeight: 700, lineHeight: 1.15 }}>
+            {t.cta.h2a}<br /><span style={{ fontStyle: "italic", color: "var(--accent)" }}>{t.cta.h2b}</span>
           </h2>
-
-          <p className="text-[13px] text-muted leading-[1.6] mt-3">
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginTop: 12 }}>
             {count.toLocaleString()} {t.cta.sub}
           </p>
-
-          <div className="mt-6">
+          <div style={{ marginTop: 24 }}>
             <WaitlistForm
+              onSubmit={onSubmit}
               successEmoji="😸"
               successMessage={t.cta.success}
               successSub={t.cta.successSub}

@@ -1,19 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300,100;9..144,400,80;9..144,500,60;9..144,600,40;9..144,700,30&family=Anybody:wght@300;400;500;600&family=Overpass+Mono:wght@400;500;600&display=swap');
-@import "tailwindcss";
 
-@theme inline {
-  --color-background: #FBF9F1;
-  --color-foreground: #2D2B26;
-  --color-accent: #D89840;
-  --color-accent-light: #FFF5E6;
-  --color-accent-text: #8B6420;
-  --color-card: #FFFFFF;
-  --color-border: #EBE8DF;
-  --color-muted: #A09B8E;
-  --color-muted-light: #C8C0B4;
-  --font-body: 'Anybody', sans-serif;
-  --font-display: 'Fraunces', serif;
-  --font-mono: 'Overpass Mono', monospace;
+:root {
+  --b: 'Anybody', sans-serif;
+  --d: 'Fraunces', serif;
+  --m: 'Overpass Mono', monospace;
+  --accent: #D89840;
+  --accent-light: #FFF5E6;
+  --accent-text: #8B6420;
+  --card: #FFFFFF;
+  --border: #EBE8DF;
+  --muted: #A09B8E;
+  --text: #2D2B26;
 }
 
 * {
@@ -24,12 +21,6 @@
 
 html {
   scroll-behavior: smooth;
-}
-
-body {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-body);
 }
 
 ::selection {

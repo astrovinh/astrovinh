@@ -7,31 +7,20 @@ export default function Problem() {
   const { t } = useLanguage();
 
   return (
-    <section className="px-8 py-20 max-w-[800px] mx-auto">
+    <section style={{ padding: "80px 32px", maxWidth: 800, margin: "0 auto" }}>
       <Reveal>
-        <div className="text-center">
-          <span className="text-[9px] font-mono text-accent tracking-[0.14em] uppercase font-semibold">
-            {t.problem.label}
-          </span>
-          <h2 className="text-[34px] font-display font-semibold leading-[1.2] mt-2.5">
-            {t.problem.h2a}
-            <br />
-            <span className="text-muted">{t.problem.h2b}</span>
-          </h2>
+        <div style={{ textAlign: "center" }}>
+          <span style={{ fontSize: 9, fontFamily: "var(--m)", color: "#D89840", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 600 }}>{t.problem.label}</span>
+          <h2 style={{ fontSize: 34, fontFamily: "var(--d)", fontWeight: 600, lineHeight: 1.2, marginTop: 10 }}>{t.problem.h2a}<br /><span style={{ color: "var(--muted)" }}>{t.problem.h2b}</span></h2>
         </div>
       </Reveal>
-
-      <div className="grid grid-cols-3 gap-3.5 mt-10">
-        {t.problem.items.map((item, i) => (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 40 }}>
+        {t.problem.items.map((p, i) => (
           <Reveal key={i} delay={i * 0.08}>
-            <div className="bg-card border border-border rounded-2xl px-[18px] py-[22px]">
-              <span className="text-[26px]">{item.emoji}</span>
-              <h3 className="text-[13px] font-display font-semibold mt-2.5">
-                {item.title}
-              </h3>
-              <p className="text-[11.5px] text-muted leading-[1.6] mt-1.5">
-                {item.body}
-              </p>
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 16, padding: "22px 18px" }}>
+              <span style={{ fontSize: 26 }}>{p.emoji}</span>
+              <h3 style={{ fontSize: 13, fontFamily: "var(--d)", fontWeight: 600, marginTop: 10 }}>{p.title}</h3>
+              <p style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.6, marginTop: 6 }}>{p.body}</p>
             </div>
           </Reveal>
         ))}

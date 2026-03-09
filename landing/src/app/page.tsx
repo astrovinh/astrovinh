@@ -13,19 +13,23 @@ import CtaSection from "@/components/CtaSection";
 import Footer from "@/components/Footer";
 
 export default function Home() {
-  const [count] = useState(847);
+  const [count, setCount] = useState(847);
+
+  const onWaitlistSubmit = () => setCount((c) => c + 1);
 
   return (
     <LanguageProvider>
-      <Navbar />
-      <Hero count={count} />
-      <Problem />
-      <Features />
-      <HowItWorks />
-      <SocialProof />
-      <Audience />
-      <CtaSection count={count} />
-      <Footer />
+      <div style={{ fontFamily: "var(--b)", background: "#FBF9F1", color: "#2D2B26", minHeight: "100vh" }}>
+        <Navbar />
+        <Hero count={count} onSubmit={onWaitlistSubmit} />
+        <Problem />
+        <Features />
+        <HowItWorks />
+        <SocialProof />
+        <Audience />
+        <CtaSection count={count} onSubmit={onWaitlistSubmit} />
+        <Footer />
+      </div>
     </LanguageProvider>
   );
 }

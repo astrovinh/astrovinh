@@ -6,15 +6,13 @@ export default function Footer() {
   const { t } = useLanguage();
 
   return (
-    <footer className="border-t border-border px-8 py-7 text-center">
-      <div className="flex justify-center items-center gap-2 mb-2.5">
-        <span className="text-base">😺</span>
-        <span className="text-[13px] font-display font-semibold">DevPet</span>
+    <footer style={{ borderTop: "1px solid var(--border)", padding: "28px 32px", textAlign: "center" }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 16 }}>😺</span>
+        <span style={{ fontSize: 13, fontFamily: "var(--d)", fontWeight: 600 }}>DevPet</span>
       </div>
-      <p className="text-[10px] font-mono text-muted">{t.footer.tagline}</p>
-      <p className="text-[9px] font-mono text-muted-light mt-1.5">
-        {t.footer.copy}
-      </p>
+      <p style={{ fontSize: 10, fontFamily: "var(--m)", color: "var(--muted)" }}>{t.footer.tagline}</p>
+      <p style={{ fontSize: 9, fontFamily: "var(--m)", color: "#C8C0B4", marginTop: 6 }}>{t.footer.copy}</p>
     </footer>
   );
 }
