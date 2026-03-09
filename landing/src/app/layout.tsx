@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className="antialiased" style={{ fontFamily: "'Open Sans', sans-serif" }}>
         {children}
 
         {/* Plausible Analytics — update data-domain when domain is registered */}
