@@ -1,43 +1,7 @@
-@font-face {
-  font-family: 'Open Sans';
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url('/fonts/open-sans-latin-300-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Open Sans';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/open-sans-latin-400-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Open Sans';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/open-sans-latin-500-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Open Sans';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/open-sans-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Open Sans';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/open-sans-latin-700-normal.woff2') format('woff2');
-}
-
 :root {
-  --b: 'Open Sans', sans-serif;
-  --d: 'Open Sans', sans-serif;
-  --m: 'Open Sans', sans-serif;
+  --b: var(--font-opensans), 'Open Sans', sans-serif;
+  --d: var(--font-opensans), 'Open Sans', sans-serif;
+  --m: var(--font-opensans), 'Open Sans', sans-serif;
   --accent: #D89840;
   --accent-light: #FFF5E6;
   --accent-text: #8B6420;
@@ -51,10 +15,6 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-}
-
-html, body, * {
-  font-family: 'Open Sans', sans-serif !important;
 }
 
 html {
