@@ -9,8 +9,8 @@ export default function Navbar() {
   return (
     <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(180deg, #FBF9F1 70%, transparent)", backdropFilter: "blur(8px)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 22 }}>😺</span>
-        <span style={{ fontSize: 15, fontWeight: 600 }}>DevPet</span>
+        <span style={{ fontSize: 32 }}>😺</span>
+        <span style={{ fontSize: 20, fontWeight: 600 }}>DevPet</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
         <a href="#features" style={{ fontSize: 11, color: "var(--muted)", textDecoration: "none", transition: "color 0.2s" }}
