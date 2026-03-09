@@ -1,9 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap');
-
 :root {
-  --b: 'Open Sans', sans-serif;
-  --d: 'Open Sans', sans-serif;
-  --m: 'Open Sans', sans-serif;
+  --b: inherit;
+  --d: inherit;
+  --m: inherit;
   --accent: #D89840;
   --accent-light: #FFF5E6;
   --accent-text: #8B6420;

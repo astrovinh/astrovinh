@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Open_Sans } from "next/font/google";
 import "./globals.css";
+
+const openSans = Open_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-open-sans",
+});
 
 export const metadata: Metadata = {
   title: "DevPet — Level up your vibe coding",
@@ -26,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={openSans.className}>
       <body className="antialiased">
         {children}
 
