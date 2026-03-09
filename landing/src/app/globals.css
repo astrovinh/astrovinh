@@ -17,9 +17,12 @@
   padding: 0;
 }
 
+html, body, * {
+  font-family: 'Open Sans', sans-serif !important;
+}
+
 html {
   scroll-behavior: smooth;
-  font-family: var(--b);
 }
 
 ::selection {
