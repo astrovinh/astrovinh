@@ -1,10 +1,5 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import "@fontsource/open-sans/300.css";
-import "@fontsource/open-sans/400.css";
-import "@fontsource/open-sans/500.css";
-import "@fontsource/open-sans/600.css";
-import "@fontsource/open-sans/700.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
