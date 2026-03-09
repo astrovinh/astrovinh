@@ -39,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={openSans.className}>
+    <html lang="en" className={`${openSans.className} ${openSans.variable}`}>
       <body className="antialiased">
         {children}
 
