@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300,100;9..144,400,80;9..144,500,60;9..144,600,40;9..144,700,30&family=Anybody:wght@300;400;500;600&family=Overpass+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --b: 'Anybody', sans-serif;
-  --d: 'Fraunces', serif;
-  --m: 'Overpass Mono', monospace;
+  --b: 'Open Sans', sans-serif;
+  --d: 'Open Sans', sans-serif;
+  --m: 'Open Sans', sans-serif;
   --accent: #D89840;
   --accent-light: #FFF5E6;
   --accent-text: #8B6420;
