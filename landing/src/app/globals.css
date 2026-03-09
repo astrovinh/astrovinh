@@ -1,7 +1,7 @@
 :root {
-  --b: inherit;
-  --d: inherit;
-  --m: inherit;
+  --b: 'Open Sans', sans-serif;
+  --d: 'Open Sans', sans-serif;
+  --m: 'Open Sans', sans-serif;
   --accent: #D89840;
   --accent-light: #FFF5E6;
   --accent-text: #8B6420;
