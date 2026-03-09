@@ -41,7 +41,7 @@ export default function WaitlistForm({
     return (
       <div style={{ animation: "scaleIn 0.4s ease", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 32 }}>{successEmoji}</span>
-        <span style={{ fontSize: 15, fontFamily: "var(--d)", fontWeight: 600, color: "var(--accent)" }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--accent)" }}>
           {successMessage || t.waitlist.success}
         </span>
         <span style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -59,11 +59,11 @@ export default function WaitlistForm({
         onChange={(e) => setEmail(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
         placeholder={t.waitlist.placeholder}
-        style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, fontFamily: "var(--b)", padding: "11px 12px", outline: "none" }}
+        style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, padding: "11px 12px", outline: "none" }}
       />
       <button
         onClick={handleSubmit}
-        style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 22px", fontSize: 12, fontFamily: "var(--d)", fontWeight: 600, cursor: "pointer", transition: "transform 0.15s", flexShrink: 0 }}
+        style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 22px", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "transform 0.15s", flexShrink: 0 }}
         onMouseEnter={e => ((e.target as HTMLElement).style.transform = "translateY(-1px)")}
         onMouseLeave={e => ((e.target as HTMLElement).style.transform = "")}
       >

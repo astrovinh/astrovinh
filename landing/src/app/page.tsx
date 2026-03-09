@@ -19,7 +19,7 @@ export default function Home() {
 
   return (
     <LanguageProvider>
-      <div style={{ fontFamily: "var(--b)", background: "#FBF9F1", color: "#2D2B26", minHeight: "100vh" }}>
+      <div style={{ background: "#FBF9F1", color: "#2D2B26", minHeight: "100vh" }}>
         <Navbar />
         <Hero count={count} onSubmit={onWaitlistSubmit} />
         <Problem />

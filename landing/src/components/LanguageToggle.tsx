@@ -17,7 +17,6 @@ export default function LanguageToggle() {
             border: "none",
             padding: "5px 10px",
             fontSize: 10,
-            fontFamily: "var(--m)",
             fontWeight: 600,
             cursor: "pointer",
             transition: "all 0.15s",

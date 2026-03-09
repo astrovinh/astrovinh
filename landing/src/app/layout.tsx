@@ -1,19 +1,6 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
-
-const openSans = localFont({
-  src: [
-    { path: "../../public/fonts/open-sans-latin-300-normal.woff2", weight: "300", style: "normal" },
-    { path: "../../public/fonts/open-sans-latin-400-normal.woff2", weight: "400", style: "normal" },
-    { path: "../../public/fonts/open-sans-latin-500-normal.woff2", weight: "500", style: "normal" },
-    { path: "../../public/fonts/open-sans-latin-600-normal.woff2", weight: "600", style: "normal" },
-    { path: "../../public/fonts/open-sans-latin-700-normal.woff2", weight: "700", style: "normal" },
-  ],
-  variable: "--font-opensans",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "DevPet — Level up your vibe coding",
@@ -39,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${openSans.className} ${openSans.variable}`}>
+    <html lang="en">
       <body className="antialiased">
         {children}
 

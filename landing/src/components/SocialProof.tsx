@@ -13,12 +13,12 @@ export default function SocialProof() {
           <div style={{ display: "flex", justifyContent: "center", gap: 36, marginBottom: 28, flexWrap: "wrap" as const }}>
             {t.social.stats.map((s, i) => (
               <div key={i}>
-                <div style={{ fontSize: 26, fontFamily: "var(--m)", fontWeight: 700, color: "var(--accent)" }}>{s.value}</div>
-                <div style={{ fontSize: 10, fontFamily: "var(--m)", color: "var(--muted)", marginTop: 3 }}>{s.label}</div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "var(--accent)" }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 3 }}>{s.label}</div>
               </div>
             ))}
           </div>
-          <p style={{ fontSize: 15, fontFamily: "var(--d)", fontStyle: "italic", color: "#777", lineHeight: 1.65, maxWidth: 480, margin: "0 auto" }}>&ldquo;{t.social.quote}&rdquo;</p>
+          <p style={{ fontSize: 15, fontStyle: "italic", color: "#777", lineHeight: 1.65, maxWidth: 480, margin: "0 auto" }}>&ldquo;{t.social.quote}&rdquo;</p>
           <div style={{ marginTop: 10, fontSize: 11, color: "var(--muted)" }}>— {t.social.author}</div>
         </div>
       </Reveal>
