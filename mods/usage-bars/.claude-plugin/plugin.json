@@ -1,0 +1,6 @@
+{
+  "name": "usage-bars",
+  "version": "0.1.0",
+  "description": "Always-visible bars above the prompt: daily (5h) limit, weekly limit and a context window stacked by category.",
+  "types": "./types/index.d.ts"
+}
