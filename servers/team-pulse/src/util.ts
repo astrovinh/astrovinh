@@ -27,6 +27,11 @@ export function text(v: unknown, max: number): string {
   return typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : ''
 }
 
+/** The form a name is compared in: composed Unicode, lower case. */
+export function nameKey(name: string): string {
+  return name.normalize('NFC').toLowerCase()
+}
+
 export type Res = { status: number; body: unknown }
 export const ok = (body: unknown): Res => ({ status: 200, body })
 export const fail = (status: number, error: string): Res => ({ status, body: { error } })

@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
-import { fail, ok, randomHex, randomId, safeEqual, sha256, text } from './util'
+import { fail, nameKey, ok, randomHex, randomId, safeEqual, sha256, text } from './util'
 import type { Res } from './util'
 
 export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120 } as const
@@ -13,7 +13,8 @@ export class Team extends DurableObject {
     this.sql = ctx.storage.sql
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, name TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, is_admin INTEGER NOT NULL, joined_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, is_admin INTEGER NOT NULL, joined_at INTEGER NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS members_name_key ON members (name_key);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, member TEXT NOT NULL, project TEXT NOT NULL, branch TEXT NOT NULL, line TEXT NOT NULL, state TEXT NOT NULL, state_since INTEGER NOT NULL, five_hour REAL, week REAL, started_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS segments (session TEXT NOT NULL, member TEXT NOT NULL, start_at INTEGER NOT NULL, end_at INTEGER NOT NULL);
     `)
@@ -28,15 +29,22 @@ export class Team extends DurableObject {
     this.sql.exec('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v', k, v)
   }
 
+  /** Adds a member, or returns null when another member already has this name (unique name_key). */
   protected async addMember(name: string, isAdmin: boolean, now: number) {
     const id = randomId(12)
     const key = randomHex(32)
-    this.sql.exec('INSERT INTO members (id, name, key_hash, is_admin, joined_at) VALUES (?, ?, ?, ?, ?)', id, name, await sha256(key), isAdmin ? 1 : 0, now)
+    const keyHash = await sha256(key)
+    try {
+      this.sql.exec('INSERT INTO members (id, name, name_key, key_hash, is_admin, joined_at) VALUES (?, ?, ?, ?, ?, ?)', id, name, nameKey(name), keyHash, isAdmin ? 1 : 0, now)
+    } catch (e) {
+      if (/UNIQUE constraint failed: members\.name_key/i.test(String(e))) return null
+      throw e
+    }
     return { id, key }
   }
 
   protected nameTaken(name: string): boolean {
-    return this.sql.exec('SELECT 1 FROM members WHERE lower(name) = lower(?)', name).toArray().length > 0
+    return this.sql.exec('SELECT 1 FROM members WHERE name_key = ?', nameKey(name)).toArray().length > 0
   }
 
   /** True when `id` already made `perMinute` calls in the last minute. */
@@ -58,6 +66,7 @@ export class Team extends DurableObject {
     this.setMeta('id', teamId)
     this.setMeta('code', code)
     const m = await this.addMember(name, true, now)
+    if (!m) return fail(409, `Someone on the team is already called ${name}. Join with a different name.`)
     return ok({ teamId, team, joinCode: `${teamId}.${code}`, memberId: m.id, key: m.key, isAdmin: true })
   }
 
@@ -70,6 +79,7 @@ export class Team extends DurableObject {
     if (!name) return fail(400, 'Give your name')
     if (this.nameTaken(name)) return fail(409, `Someone on the team is already called ${name}. Join with a different name.`)
     const m = await this.addMember(name, false, now)
+    if (!m) return fail(409, `Someone on the team is already called ${name}. Join with a different name.`)
     return ok({ teamId: this.meta('id'), team: this.meta('team'), memberId: m.id, key: m.key, isAdmin: false })
   }
 }

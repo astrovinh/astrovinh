@@ -37,4 +37,17 @@ describe('create and join', () => {
     expect((await api('POST', '/teams', { raw: JSON.stringify({ team: 'x'.repeat(3000), name: 'A' }) })).status).toBe(413)
     expect((await api('POST', '/teams', { raw: '{nope' })).status).toBe(400)
   })
+
+  it('refuses a duplicate name that differs only by Vietnamese case', async () => {
+    const { teamId, code } = await newTeam()
+    expect((await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'Đức' } })).status).toBe(200)
+    expect((await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'đức' } })).status).toBe(409)
+  })
+
+  it('refuses the same name in decomposed form', async () => {
+    const { teamId, code } = await newTeam()
+    const ánh = 'Ánh'.normalize('NFC')
+    expect((await api('POST', `/teams/${teamId}/join`, { body: { code, name: ánh } })).status).toBe(200)
+    expect((await api('POST', `/teams/${teamId}/join`, { body: { code, name: ánh.normalize('NFD') } })).status).toBe(409)
+  })
 })
