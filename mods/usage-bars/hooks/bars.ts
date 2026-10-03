@@ -148,9 +148,10 @@ function limitGroup(i: number, label: string, r: Reading | undefined): string {
   return group(i, label, [{ width: used.width, color: used.color! }], r.percentUsed)
 }
 
-import type { Spend } from '../types'
+import type { Spend, System } from '../types'
+import { ring, ringColor } from './system'
 
-type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; spend: Spend | null; now: number }
+type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; spend: Spend | null; system: System | null; now: number }
 
 /** Dollars cut short, never rounded up: $0.42, $3.4, $12, $1.2k, $12k. */
 export function usd(n: number): string {
@@ -163,37 +164,87 @@ export function usd(n: number): string {
 }
 
 /** Day, Week and Ctx as one row: tiny labels, thin rounded bars. */
-export function bandSvg(a: BandInput): { source: string; alt: string } {
+export function bandSvg(a: BandInput): { source: string; alt: string; width: number } {
   const { cells } = contextCells(a.segments, BAR_W)
   const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '─' ? BUFFER : 'transparent') }))
 
   const pct = (r?: Reading) => (r ? `${Math.round(r.percentUsed)}%` : 'no reading')
   const alt =
     `Day ${pct(a.day)}, Week ${pct(a.week)}, Context ${a.contextPercent === null ? 'no reading' : `${Math.round(a.contextPercent)}%`}` +
-    (a.spend === null ? '' : `, This week ${usd(a.spend.week)}`)
+    (a.spend === null ? '' : `, This week ${usd(a.spend.week)}`) +
+    sysItems(a.system).map(i => `, ${i.name} ${Math.round(i.percent)}%`).join('')
 
+  const rings = sysRings(a.system, (GROUP_W + GROUP_GAP) * 3 + COST_W + RING_GAP)
+  const width = rings.width || BAND_W
   const source =
-    svgOpen(BAND_W) +
+    svgOpen(width) +
     limitGroup(0, 'Day', a.day) +
     limitGroup(1, 'Week', a.week) +
     group(2, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null) +
     (a.spend === null ? '' : `<text x="${(GROUP_W + GROUP_GAP) * 3}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
+    rings.source +
     `</svg>`
 
-  return { source, alt }
+  return { source, alt, width }
 }
 
-const CHAR_W = 5.6 // a generous average advance at 10px, so text never clips
+type SysItem = { label: string; name: string; percent: number; kind: 'load' | 'battery' }
 
-/** The row shown on hover: reset times, then each context category beside its bar color. */
-export function detailSvg(a: BandInput): { source: string; alt: string; width: number } {
+function sysItems(s: System | null): SysItem[] {
+  if (!s) return []
+  const items: (SysItem | null)[] = [
+    s.cpu === null ? null : { label: 'CPU', name: 'CPU', percent: s.cpu, kind: 'load' },
+    s.memory === null ? null : { label: 'Mem', name: 'Memory', percent: s.memory, kind: 'load' },
+    s.disk === null ? null : { label: 'Disk', name: 'Disk', percent: s.disk.percent, kind: 'load' },
+    s.battery === null ? null : { label: 'Bat', name: 'Battery', percent: s.battery.percent, kind: 'battery' }
+  ]
+  return items.filter((i): i is SysItem => i !== null)
+}
+
+const RING_GAP = 10
+const RING_R = 5
+
+/** CPU, memory, disk and battery as small rings, each with its label and percent, from `x`. */
+function sysRings(s: System | null, x: number): { source: string; width: number } {
+  const items = sysItems(s)
+  if (!items.length) return { source: '', width: 0 }
+  let at = x
+  const parts = items.map(i => {
+    const text = `${i.label} ${Math.round(i.percent)}%`
+    const part =
+      ring(at + RING_R + 1, H / 2, RING_R, i.percent, ringColor(i.kind, i.percent), TRACK) +
+      `<text x="${at + 2 * RING_R + 6}" y="10.5" fill="${INK}">${text}</text>`
+    at += 2 * RING_R + 6 + textWidth(text) + RING_GAP
+    return part
+  })
+  return { source: parts.join(''), width: Math.ceil(at - RING_GAP) }
+}
+
+/** About how wide `s` draws at 10px in the system font, a little generous so text never collides. */
+export function textWidth(s: string): number {
+  let w = 0
+  for (const ch of s) w += /[0-9]/.test(ch) ? 6.1 : /[%MWmw]/.test(ch) ? 8.6 : /[A-Z]/.test(ch) ? 6.9 : /[a-z]/.test(ch) ? 5.4 : ch === ' ' ? 2.8 : 4.2
+  return w * 1.05
+}
+
+const LINE_GAP = 14
+
+/** Shown on hover, two short lines: limits and spend; then the machine and each context category beside its bar color. */
+export function detailSvg(a: BandInput): { source: string; alt: string; width: number; height: number } {
   const parts: string[] = []
   const words: string[] = []
+  const ends: number[] = []
   let x = 0
+  let line = 0
   const say = (s: string) => {
-    parts.push(`<text x="${x}" y="10.5" fill="${FAINT}">${esc(s)}</text>`)
+    parts.push(`<text x="${x}" y="${10.5 + line * H}" fill="${FAINT}">${esc(s)}</text>`)
     words.push(s)
-    x += s.length * CHAR_W + 12
+    x += textWidth(s) + LINE_GAP
+  }
+  const newLine = () => {
+    ends.push(x)
+    x = 0
+    line += 1
   }
 
   if (a.day?.resetsAt) say(`Day resets in ${untilReset(a.day.resetsAt, a.now)}`)
@@ -204,22 +255,30 @@ export function detailSvg(a: BandInput): { source: string; alt: string; width: n
     say(`Week $${a.spend.week.toFixed(2)} · today $${a.spend.today.toFixed(2)} in ${n} session${n === 1 ? '' : 's'} · this session $${a.spend.session.toFixed(2)} · API prices`)
   }
 
-  const { legend } = contextCells(a.segments, BAR_W)
-  a.segments
-    .filter(s => s.kind === 'used' && s.tokens > 0)
-    .forEach((s, i) => {
-      parts.push(`<circle cx="${x + 3}" cy="7" r="3" fill="${legend[i]?.color ?? INK}"/>`)
-      x += 9
-      say(`${s.name} ${tokens(s.tokens)}`)
-    })
+  const s = a.system
+  const used = a.segments.filter(seg => seg.kind === 'used' && seg.tokens > 0)
+  if (s || used.length) newLine()
+  if (s?.cpu != null) say(`CPU ${Math.round(s.cpu)}% of ${s.cores} cores`)
+  if (s?.memory != null) say(`Memory ${Math.round(s.memory)}%${s.memoryGb ? ` of ${Math.round(s.memoryGb)} GB` : ''}`)
+  if (s?.disk) say(`Disk ${Math.round(s.disk.freeGb)} GB free`)
+  if (s?.battery) say(`Battery ${Math.round(s.battery.percent)}%, ${s.battery.state}`)
 
-  const width = Math.max(1, Math.ceil(x))
-  return { source: svgOpen(width) + parts.join('') + `</svg>`, alt: words.join(', '), width }
+  const { legend } = contextCells(a.segments, BAR_W)
+  used.forEach((seg, i) => {
+    parts.push(`<circle cx="${x + 3}" cy="${7 + line * H}" r="3" fill="${legend[i]?.color ?? INK}"/>`)
+    x += 9
+    say(`${seg.name} ${tokens(seg.tokens)}`)
+  })
+  ends.push(x)
+
+  const width = Math.max(1, Math.ceil(Math.max(...ends) - LINE_GAP))
+  const height = (line + 1) * H
+  return { source: svgOpen(width, height) + parts.join('') + `</svg>`, alt: words.join(', '), width, height }
 }
 
-function svgOpen(width: number): string {
+function svgOpen(width: number, height = H): string {
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${H}" viewBox="0 0 ${width} ${H}" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" ` +
     `font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="10" style="font-variant-numeric:tabular-nums">`
   )
 }

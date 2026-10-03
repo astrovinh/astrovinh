@@ -35,14 +35,14 @@ test('untilReset formats days, hours, minutes', () => {
 })
 
 test('band shows a dash when a limit has no reading', () => {
-  const { source, alt } = bandSvg({ segments: [], contextPercent: null, spend: null, now: 0 })
+  const { source, alt } = bandSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 })
   expect(source.includes(`width="${BAND_W}"`)).toBe(true)
   expect(source.includes('>–<')).toBe(true)
   expect(alt).toBe('Day no reading, Week no reading, Context no reading')
 })
 
 test('band fills a limit bar in proportion, colored by severity', () => {
-  const { source } = bandSvg({ day: { percentUsed: 50 }, week: { percentUsed: 90 }, segments: [], contextPercent: null, spend: null, now: 0 })
+  const { source } = bandSvg({ day: { percentUsed: 50 }, week: { percentUsed: 90 }, segments: [], contextPercent: null, spend: null, system: null, now: 0 })
   expect(source.includes('<rect x="0" width="28" height="4" fill="#9ece6a"/>')).toBe(true)
   expect(source.includes('fill="#f7768e"')).toBe(true)
   expect(source.includes('>50%<')).toBe(true)
@@ -50,14 +50,14 @@ test('band fills a limit bar in proportion, colored by severity', () => {
 
 test('hover row says when there is no limit reading, and gives reset times when there is', () => {
   const now = Date.parse('2026-10-02T00:00:00Z')
-  expect(detailSvg({ segments: [], contextPercent: null, spend: null, now }).alt).toBe('No limit reading yet')
-  const { alt } = detailSvg({ day: { percentUsed: 5, resetsAt: '2026-10-02T02:10:00Z' }, week: { percentUsed: 9, resetsAt: '2026-10-05T04:00:00Z' }, segments: [], contextPercent: null, spend: null, now })
+  expect(detailSvg({ segments: [], contextPercent: null, spend: null, system: null, now }).alt).toBe('No limit reading yet')
+  const { alt } = detailSvg({ day: { percentUsed: 5, resetsAt: '2026-10-02T02:10:00Z' }, week: { percentUsed: 9, resetsAt: '2026-10-05T04:00:00Z' }, segments: [], contextPercent: null, spend: null, system: null, now })
   expect(alt).toBe('Day resets in 2h 10m, Week resets in 3d 4h')
 })
 
 test('hover row escapes category names and colors each like its bar', () => {
   const segs = [{ name: 'A<b>&"c', tokens: 12000, kind: 'used' as const }, { name: 'Free', tokens: 9000, kind: 'free' as const }]
-  const { source } = detailSvg({ segments: segs, contextPercent: 6, spend: null, now: 0 })
+  const { source } = detailSvg({ segments: segs, contextPercent: 6, spend: null, system: null, now: 0 })
   expect(source.includes('A&lt;b&gt;&amp;&quot;c 12k')).toBe(true)
   expect(source.includes('A<b>')).toBe(false)
   expect(source.includes(`fill="${contextCells(segs, 56).legend[0]!.color}"`)).toBe(true)
@@ -78,9 +78,21 @@ test('usd cuts digits short and never rounds up', () => {
 
 test("band shows the week's spend at the right, and leaves it out when unknown", () => {
   const spend = { week: 140.129, today: 27.41, sessionsToday: 6, session: 3.41 }
-  const shown = bandSvg({ segments: [], contextPercent: null, spend, now: 0 })
+  const shown = bandSvg({ segments: [], contextPercent: null, spend, system: null, now: 0 })
   expect(shown.source.includes('>$140<')).toBe(true)
   expect(shown.alt.endsWith(', This week $140')).toBe(true)
-  expect(bandSvg({ segments: [], contextPercent: null, spend: null, now: 0 }).source.includes('$')).toBe(false)
-  expect(detailSvg({ segments: [], contextPercent: null, spend, now: 0 }).alt.includes('Week $140.13 · today $27.41 in 6 sessions · this session $3.41 · API prices')).toBe(true)
+  expect(bandSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 }).source.includes('$')).toBe(false)
+  expect(detailSvg({ segments: [], contextPercent: null, spend, system: null, now: 0 }).alt.includes('Week $140.13 · today $27.41 in 6 sessions · this session $3.41 · API prices')).toBe(true)
+})
+
+test('band adds a ring per system reading, widens to fit, and skips a missing battery', () => {
+  const system = { cpu: 27, cores: 10, memory: 32, memoryGb: 34, disk: { percent: 77, freeGb: 224 }, battery: null }
+  const b = bandSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
+  expect(b.width > BAND_W).toBe(true)
+  expect(b.source.includes(`width="${b.width}"`)).toBe(true)
+  expect(b.source.includes('>CPU 27%<') && b.source.includes('>Mem 32%<') && b.source.includes('>Disk 77%<')).toBe(true)
+  expect(b.source.includes('Bat')).toBe(false)
+  expect(b.alt.endsWith(', CPU 27%, Memory 32%, Disk 77%')).toBe(true)
+  const d = detailSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
+  expect(d.alt.includes('CPU 27% of 10 cores, Memory 32% of 34 GB, Disk 224 GB free')).toBe(true)
 })

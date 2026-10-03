@@ -1,19 +1,59 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Limit, Segment, Spend } from '../types'
-import { bandSvg, BAND_H, BAND_W, contextCells, detailSvg, limitCells, usd } from './bars'
+import type { Limit, Segment, Spend, System } from '../types'
+import { bandSvg, BAND_H, contextCells, detailSvg, limitCells, usd } from './bars'
 import type { Cell } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
+import { parseBattery, parseCpu, parseDisk, parseMemory } from './system'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
 const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
 const contextPercent = atom({ plugin: 'usage-bars', key: 'contextPercent' } as const, null as number | null)
 const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limit[])
 const spend = atom({ plugin: 'usage-bars', key: 'spend' } as const, null as Spend | null)
+const system = atom({ plugin: 'usage-bars', key: 'system' } as const, null as System | null)
 
 const BAR = 10 // terminal bar cells
+const SYSTEM_MS = 10_000
+
+/** A command's output, or '' when it fails: a missing reading leaves its ring out. */
+async function run($: any, argv: string[]): Promise<string> {
+  const r = await $.process.run(argv, { timeoutMs: 3000 }).catch(() => null)
+  return r && r.exitCode === 0 ? r.stdout : ''
+}
+
+let cores = 0
+let memoryBytes = 0
+let polling = false
+
+/** Reads CPU, memory, disk and battery; about 0.03 s of work, skipped while one is running. */
+async function pollSystem($: any) {
+  if (polling) return
+  polling = true
+  try {
+    if (!cores) cores = Number((await run($, ['sysctl', '-n', 'hw.ncpu'])).trim()) || 0
+    if (!memoryBytes) memoryBytes = Number((await run($, ['sysctl', '-n', 'hw.memsize'])).trim()) || 0
+    const [ps, pressure, batt] = await Promise.all([
+      run($, ['ps', '-A', '-o', '%cpu=']),
+      run($, ['memory_pressure', '-Q']),
+      run($, ['pmset', '-g', 'batt'])
+    ])
+    // macOS keeps user files on the Data volume; `/` is the sealed system snapshot.
+    const df = (await run($, ['df', '-k', '/System/Volumes/Data'])) || (await run($, ['df', '-k', '/']))
+    await update($, system, () => ({
+      cpu: parseCpu(ps, cores),
+      cores,
+      memory: parseMemory(pressure),
+      memoryGb: memoryBytes ? memoryBytes / 1e9 : null,
+      disk: parseDisk(df),
+      battery: parseBattery(batt)
+    }))
+  } finally {
+    polling = false
+  }
+}
 
 async function refresh($: any) {
   const u = await $.session.usage({ breakdown: 'summary' })
@@ -45,6 +85,8 @@ async function tally($: any, total: number) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await refresh($).catch(() => {})
+    void pollSystem($).catch(() => {})
+    $.clock.every(SYSTEM_MS, () => void pollSystem($).catch(() => {}))
     return next(e)
   })
 
@@ -61,20 +103,21 @@ export const register: Register = on => {
     const segs = await read($, segments)
     const pct = await read($, contextPercent)
     const spent = await read($, spend)
+    const sys = await read($, system)
 
     const day = lims.find(l => l.kind === 'five_hour')
     const week = lims.find(l => l.kind === 'seven_day')
 
     if (e.surface === 'desktop') {
       const { Box, Svg } = $.ui.resolve(e)
-      const input = { day, week, segments: segs, contextPercent: pct, spend: spent, now }
+      const input = { day, week, segments: segs, contextPercent: pct, spend: spent, system: sys, now }
       const band = bandSvg(input)
       const detail = detailSvg(input)
       return (
         <Box key="usage-bars" flexDirection="column" paddingX={1}>
-          <Svg source={band.source} alt={band.alt} width={BAND_W} height={BAND_H} />
+          <Svg source={band.source} alt={band.alt} width={band.width} height={BAND_H} />
           <Box display="none" hover={{ display: 'flex' }}>
-            <Svg source={detail.source} alt={detail.alt} width={detail.width} height={BAND_H} />
+            <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
           </Box>
         </Box>
       )
@@ -105,6 +148,19 @@ export const register: Register = on => {
         {panel('Week', week ? limitCells(week.percentUsed, BAR) : null, week?.percentUsed ?? null)}
         {panel('Ctx', segs.length ? contextCells(segs, BAR).cells : null, segs.length ? pct : null, true)}
         {spent === null ? null : <Text dimColor>{`   ${usd(spent.week)}`}</Text>}
+        {sys === null ? null : (
+          <Text dimColor>
+            {[
+              sys.cpu === null ? '' : `CPU ${Math.round(sys.cpu)}%`,
+              sys.memory === null ? '' : `Mem ${Math.round(sys.memory)}%`,
+              sys.disk === null ? '' : `Disk ${Math.round(sys.disk.percent)}%`,
+              sys.battery === null ? '' : `Bat ${Math.round(sys.battery.percent)}%`
+            ]
+              .filter(Boolean)
+              .map(t => `   ${t}`)
+              .join('')}
+          </Text>
+        )}
       </Box>
     )
   })
