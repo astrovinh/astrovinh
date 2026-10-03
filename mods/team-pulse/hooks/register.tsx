@@ -143,6 +143,8 @@ async function runCommand($: any, args: string): Promise<string> {
       const r = await call<any>($, srv, { method: 'POST', path: '/teams', body: { team, name: name.join(' ') } })
       if (!r.ok) return r.message
       await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: name.join(' '), isAdmin: true, joinCode: r.data.joinCode })
+      nextBeatAt = 0
+      void beat($).catch(() => {})
       await openPanel($)
       return `Created ${r.data.team}. Teammates join with: /team join ${r.data.joinCode} <their name>`
     }
@@ -153,6 +155,8 @@ async function runCommand($: any, args: string): Promise<string> {
       const r = await call<any>($, srv, { method: 'POST', path: `/teams/${parsed.teamId}/join`, body: { code: parsed.secret, name: name.join(' ') } })
       if (!r.ok) return r.message
       await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: name.join(' '), isAdmin: false })
+      nextBeatAt = 0
+      void beat($).catch(() => {})
       await openPanel($)
       return `Joined ${r.data.team}. Your sessions are shared from now on; /team pause stops it.`
     }
@@ -221,11 +225,22 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    lastTurnAt = await $.clock.now()
     if (!e.text.startsWith('/')) {
+      lastTurnAt = await $.clock.now()
       lastPrompt = e.text
       void writeLine($).catch(() => {})
     }
+    return next(e)
+  })
+
+  // A long turn keeps the session working: every tool call and the end of the turn count as activity.
+  on('tool.call', async ($, e, next) => {
+    lastTurnAt = await $.clock.now()
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    lastTurnAt = await $.clock.now()
     return next(e)
   })
 
