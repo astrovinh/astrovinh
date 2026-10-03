@@ -11,10 +11,10 @@ import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { basename, buildHeartbeat } from './share'
 
-const snapshot = atom({ plugin: 'team-pulse', key: 'snapshot' } as const, null as Snapshot | null)
-const fetchedAt = atom({ plugin: 'team-pulse', key: 'fetchedAt' } as const, 0)
-const problem = atom({ plugin: 'team-pulse', key: 'problem' } as const, null as string | null)
-const expanded = atom({ plugin: 'team-pulse', key: 'expanded' } as const, [] as string[])
+const snapshot = atom({ plugin: 'murror', key: 'snapshot' } as const, null as Snapshot | null)
+const fetchedAt = atom({ plugin: 'murror', key: 'fetchedAt' } as const, 0)
+const problem = atom({ plugin: 'murror', key: 'problem' } as const, null as string | null)
+const expanded = atom({ plugin: 'murror', key: 'expanded' } as const, [] as string[])
 
 // This session's own facts; a reload starts them over, which only delays one heartbeat.
 const sessionId = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('')
@@ -277,7 +277,7 @@ export const register: Register = on => {
   })
 
   on('ui.press', async ($, e, next) => {
-    if (e.plugin !== 'team-pulse' || !e.element.startsWith('expand:')) return next(e)
+    if (e.plugin !== 'murror' || !e.element.startsWith('expand:')) return next(e)
     const id = e.element.slice('expand:'.length)
     await update($, expanded, list => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]))
     return next(e)

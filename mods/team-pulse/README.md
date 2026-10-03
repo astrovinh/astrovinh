@@ -1,4 +1,4 @@
-# team-pulse
+# murror (team presence mod)
 
 A side panel showing which teammates are running Claude Code, what each session is working on, and their 5-hour and weekly limits. Open it with `/team`.
 

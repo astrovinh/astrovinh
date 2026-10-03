@@ -47,7 +47,7 @@ export type Membership = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'team-pulse': {
+    'murror': {
       snapshot: Snapshot | null
       fetchedAt: number
       problem: string | null
