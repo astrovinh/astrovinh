@@ -4,7 +4,19 @@ A side panel showing which teammates are running Claude Code, what each session 
 
 ## What you share
 
-Every 60 seconds while a session is open: the project folder name, the git branch, a one-line summary of what you are working on, whether you are working or idle, and your 5-hour and weekly limit percentages. Never your prompts, Claude's replies, code, file paths or cost. The summary is written on your Mac by a small Claude model from your latest prompt; you see each new line in a toast before teammates do.
+While a session is open, every 60 seconds, your team pulse mod shares this with everyone on your team (the person who runs the team server can also read everything it stores):
+
+- your name, and whether you are working or idle
+- the project folder name and git branch of each open session
+- a one-line summary of what you are working on
+- your 5-hour and weekly Claude limit percentages
+- how many sessions you have open, how long each has been open, and when you were active over the last 12 hours
+
+The summary is made from your latest prompt by a small Claude model, called through your own Claude login, the same way your prompts already reach Claude. The prompt itself is never sent to the team server. Each new summary appears to you in a toast; `/team say <text>` replaces it with your own words, and `/team pause` stops sharing.
+
+Never shared: your prompts, Claude's replies, code, file paths beyond the folder name, or cost.
+
+The team server keeps activity for 7 days. `/team leave` deletes everything about you right away.
 
 ## Install
 
