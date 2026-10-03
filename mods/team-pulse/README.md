@@ -25,7 +25,7 @@ Clone the repo, then add `mods/team-pulse` to Claude Code's plugin folders (the 
 ## Commands
 
 - `/team create <team> <your name>`: start a team; you get a join code to share
-- `/team`: open or close the panel
+- `/team`: open or close the panel; it reopens in new sessions until you close it
 - `/team join <code> <your name>`: join with the code your admin shares
 - `/team pause` and `/team resume`: stop and restart sharing on this Mac
 - `/team say <text>`: set your line yourself; `/team say` alone goes back to automatic lines

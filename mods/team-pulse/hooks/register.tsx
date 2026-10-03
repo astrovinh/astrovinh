@@ -7,6 +7,7 @@ import type { CallResult } from './client'
 import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from './config'
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
 import { drawPanel } from './panel'
+import { pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { basename, buildHeartbeat } from './share'
@@ -80,6 +81,7 @@ async function beat($: any) {
     nextBeatAt = 0
   } else if (r.status === 401) {
     await $.store.delete('membership')
+    await dropPanel($)
     $.ui.status(undefined)
     $.ui.toast('You were removed from the team. Join again with /team join <code> <your name>.')
   } else {
@@ -137,8 +139,22 @@ async function writeLine($: any) {
   }
 }
 
+/** Remembers whether the panel should come back in the next session. */
+async function setPinned($: any, value: boolean) {
+  if (((await $.store.get('panelPinned')) === true) !== value) await $.store.set('panelPinned', value)
+}
+
+/** Closes the panel and forgets it was open, for when there is no team to show. */
+async function dropPanel($: any) {
+  await setPinned($, false)
+  if (!panelOpen) return
+  panelOpen = false
+  await $.ui.close({ id: PANE }).catch(() => {})
+}
+
 async function openPanel($: any) {
   panelOpen = true
+  await setPinned($, true)
   await $.ui.open({ id: PANE, title: 'Team' })
   await refresh($)
 }
@@ -152,6 +168,7 @@ async function runCommand($: any, args: string): Promise<string> {
     case '':
       if (panelOpen) {
         panelOpen = false
+        await setPinned($, false)
         await $.ui.close({ id: PANE })
         return 'Team panel closed.'
       }
@@ -185,6 +202,7 @@ async function runCommand($: any, args: string): Promise<string> {
       const r = await call($, m.server, { method: 'POST', path: `/teams/${m.teamId}/leave`, key: m.key })
       if (!r.ok) return r.message
       await $.store.delete('membership')
+      await dropPanel($)
       $.ui.status(undefined)
       return `You left ${m.team}. Your shared data was deleted.`
     }
@@ -245,6 +263,11 @@ export const register: Register = on => {
       readTick += 1
       if (panelOpen || readTick % 2 === 0) void refresh($).catch(() => {})
     })
+    // Bring the panel back if it was open when the last session ended; the first refresh below draws it.
+    if ((await membership($)) && (await $.store.get('panelPinned')) === true) {
+      panelOpen = true
+      void $.ui.open({ id: PANE, title: 'Team' }).catch(() => {})
+    }
     void refresh($).catch(() => {})
     return next(e)
   })
@@ -272,7 +295,12 @@ export const register: Register = on => {
   on('command.run', { command: 'team' }, async ($, e) => ({ text: await runCommand($, e.args) }))
 
   on('ui.close', async ($, e, next) => {
-    if (e.id === PANE) panelOpen = false
+    if (e.id === PANE) {
+      panelOpen = false
+      const current = (await $.store.get('panelPinned')) === true
+      const pinned = pinnedAfterClose(e.origin.kind, current)
+      if (pinned !== current) await $.store.set('panelPinned', pinned)
+    }
     return next(e)
   })
 
