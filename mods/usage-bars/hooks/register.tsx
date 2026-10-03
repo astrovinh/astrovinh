@@ -2,13 +2,14 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment } from '../types'
-import { bandSvg, BAND_H, BAND_W, contextCells, detailSvg, limitCells } from './bars'
+import { bandSvg, BAND_H, BAND_W, contextCells, detailSvg, limitCells, usd } from './bars'
 import type { Cell } from './bars'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
 const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
 const contextPercent = atom({ plugin: 'usage-bars', key: 'contextPercent' } as const, null as number | null)
 const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limit[])
+const cost = atom({ plugin: 'usage-bars', key: 'cost' } as const, null as number | null)
 
 const BAR = 10 // terminal bar cells
 
@@ -18,6 +19,7 @@ async function refresh($: any) {
   await update($, window_, () => u.context.breakdown?.rawMaxTokens ?? u.context.window)
   await update($, contextPercent, () => u.context.breakdown?.percentage ?? u.context.percent ?? null)
   await update($, limits, () => u.rateLimits)
+  await update($, cost, () => u.cost?.usd ?? null)
   return u
 }
 
@@ -39,13 +41,14 @@ export const register: Register = on => {
     const lims = await read($, limits)
     const segs = await read($, segments)
     const pct = await read($, contextPercent)
+    const usdSpent = await read($, cost)
 
     const day = lims.find(l => l.kind === 'five_hour')
     const week = lims.find(l => l.kind === 'seven_day')
 
     if (e.surface === 'desktop') {
       const { Box, Svg } = $.ui.resolve(e)
-      const input = { day, week, segments: segs, contextPercent: pct, now }
+      const input = { day, week, segments: segs, contextPercent: pct, cost: usdSpent, now }
       const band = bandSvg(input)
       const detail = detailSvg(input)
       return (
@@ -82,6 +85,7 @@ export const register: Register = on => {
         {panel('Day', day ? limitCells(day.percentUsed, BAR) : null, day?.percentUsed ?? null)}
         {panel('Week', week ? limitCells(week.percentUsed, BAR) : null, week?.percentUsed ?? null)}
         {panel('Ctx', segs.length ? contextCells(segs, BAR).cells : null, segs.length ? pct : null, true)}
+        {usdSpent === null ? null : <Text dimColor>{`   ${usd(usdSpent)}`}</Text>}
       </Box>
     )
   })

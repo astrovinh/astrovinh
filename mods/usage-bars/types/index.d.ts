@@ -8,6 +8,7 @@ declare module 'claude-code' {
       window: number
       contextPercent: number | null
       limits: Limit[]
+      cost: number | null
     }
   }
 }

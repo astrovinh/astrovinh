@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { allocate, bandSvg, BAND_W, contextCells, detailSvg, limitCells, untilReset } from './bars'
+import { allocate, bandSvg, BAND_W, contextCells, detailSvg, limitCells, untilReset, usd } from './bars'
 
 test('allocate always fills the width', () => {
   for (const w of [1, 7, 20, 33]) {
@@ -35,14 +35,14 @@ test('untilReset formats days, hours, minutes', () => {
 })
 
 test('band shows a dash when a limit has no reading', () => {
-  const { source, alt } = bandSvg({ segments: [], contextPercent: null, now: 0 })
+  const { source, alt } = bandSvg({ segments: [], contextPercent: null, cost: null, now: 0 })
   expect(source.includes(`width="${BAND_W}"`)).toBe(true)
   expect(source.includes('>–<')).toBe(true)
   expect(alt).toBe('Day no reading, Week no reading, Context no reading')
 })
 
 test('band fills a limit bar in proportion, colored by severity', () => {
-  const { source } = bandSvg({ day: { percentUsed: 50 }, week: { percentUsed: 90 }, segments: [], contextPercent: null, now: 0 })
+  const { source } = bandSvg({ day: { percentUsed: 50 }, week: { percentUsed: 90 }, segments: [], contextPercent: null, cost: null, now: 0 })
   expect(source.includes('<rect x="0" width="28" height="4" fill="#9ece6a"/>')).toBe(true)
   expect(source.includes('fill="#f7768e"')).toBe(true)
   expect(source.includes('>50%<')).toBe(true)
@@ -50,16 +50,36 @@ test('band fills a limit bar in proportion, colored by severity', () => {
 
 test('hover row says when there is no limit reading, and gives reset times when there is', () => {
   const now = Date.parse('2026-10-02T00:00:00Z')
-  expect(detailSvg({ segments: [], contextPercent: null, now }).alt).toBe('No limit reading yet')
-  const { alt } = detailSvg({ day: { percentUsed: 5, resetsAt: '2026-10-02T02:10:00Z' }, week: { percentUsed: 9, resetsAt: '2026-10-05T04:00:00Z' }, segments: [], contextPercent: null, now })
+  expect(detailSvg({ segments: [], contextPercent: null, cost: null, now }).alt).toBe('No limit reading yet')
+  const { alt } = detailSvg({ day: { percentUsed: 5, resetsAt: '2026-10-02T02:10:00Z' }, week: { percentUsed: 9, resetsAt: '2026-10-05T04:00:00Z' }, segments: [], contextPercent: null, cost: null, now })
   expect(alt).toBe('Day resets in 2h 10m, Week resets in 3d 4h')
 })
 
 test('hover row escapes category names and colors each like its bar', () => {
   const segs = [{ name: 'A<b>&"c', tokens: 12000, kind: 'used' as const }, { name: 'Free', tokens: 9000, kind: 'free' as const }]
-  const { source } = detailSvg({ segments: segs, contextPercent: 6, now: 0 })
+  const { source } = detailSvg({ segments: segs, contextPercent: 6, cost: null, now: 0 })
   expect(source.includes('A&lt;b&gt;&amp;&quot;c 12k')).toBe(true)
   expect(source.includes('A<b>')).toBe(false)
   expect(source.includes(`fill="${contextCells(segs, 56).legend[0]!.color}"`)).toBe(true)
   expect(source.includes('Free')).toBe(false)
+})
+
+test('usd cuts digits short and never rounds up', () => {
+  expect(usd(0)).toBe('$0.00')
+  expect(usd(0.29)).toBe('$0.29')
+  expect(usd(0.426)).toBe('$0.42')
+  expect(usd(3.49)).toBe('$3.4')
+  expect(usd(9.99)).toBe('$9.9')
+  expect(usd(12.99)).toBe('$12')
+  expect(usd(999.9)).toBe('$999')
+  expect(usd(1299)).toBe('$1.2k')
+  expect(usd(12999)).toBe('$12k')
+})
+
+test('band shows the session cost at the right, and leaves it out when unknown', () => {
+  const shown = bandSvg({ segments: [], contextPercent: null, cost: 3.49, now: 0 })
+  expect(shown.source.includes('>$3.4<')).toBe(true)
+  expect(shown.alt.endsWith(', Session $3.4')).toBe(true)
+  expect(bandSvg({ segments: [], contextPercent: null, cost: null, now: 0 }).source.includes('$')).toBe(false)
+  expect(detailSvg({ segments: [], contextPercent: null, cost: 3.49, now: 0 }).alt.includes('Session $3.49 at API prices')).toBe(true)
 })

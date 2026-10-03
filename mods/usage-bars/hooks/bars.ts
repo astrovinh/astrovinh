@@ -105,7 +105,9 @@ const FAINT = 'rgba(139,139,139,0.45)'
 const TRACK = 'rgba(139,139,139,0.22)'
 const BUFFER = 'rgba(139,139,139,0.38)'
 
-export const BAND_W = GROUP_W * 3 + GROUP_GAP * 2
+const COST_W = 36
+
+export const BAND_W = (GROUP_W + GROUP_GAP) * 3 + COST_W
 export const BAND_H = H
 
 export function esc(s: string): string {
@@ -146,7 +148,17 @@ function limitGroup(i: number, label: string, r: Reading | undefined): string {
   return group(i, label, [{ width: used.width, color: used.color! }], r.percentUsed)
 }
 
-type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; now: number }
+type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; cost: number | null; now: number }
+
+/** Dollars cut short, never rounded up: $0.42, $3.4, $12, $1.2k, $12k. */
+export function usd(n: number): string {
+  const cut = (x: number, places: number) => (Math.floor(x * 10 ** places + 1e-9) / 10 ** places).toFixed(places)
+  if (n < 1) return `$${cut(n, 2)}`
+  if (n < 10) return `$${cut(n, 1)}`
+  if (n < 1000) return `$${cut(n, 0)}`
+  if (n < 10000) return `$${cut(n / 1000, 1)}k`
+  return `$${cut(n / 1000, 0)}k`
+}
 
 /** Day, Week and Ctx as one row: tiny labels, thin rounded bars. */
 export function bandSvg(a: BandInput): { source: string; alt: string } {
@@ -154,13 +166,16 @@ export function bandSvg(a: BandInput): { source: string; alt: string } {
   const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '─' ? BUFFER : 'transparent') }))
 
   const pct = (r?: Reading) => (r ? `${Math.round(r.percentUsed)}%` : 'no reading')
-  const alt = `Day ${pct(a.day)}, Week ${pct(a.week)}, Context ${a.contextPercent === null ? 'no reading' : `${Math.round(a.contextPercent)}%`}`
+  const alt =
+    `Day ${pct(a.day)}, Week ${pct(a.week)}, Context ${a.contextPercent === null ? 'no reading' : `${Math.round(a.contextPercent)}%`}` +
+    (a.cost === null ? '' : `, Session ${usd(a.cost)}`)
 
   const source =
     svgOpen(BAND_W) +
     limitGroup(0, 'Day', a.day) +
     limitGroup(1, 'Week', a.week) +
     group(2, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null) +
+    (a.cost === null ? '' : `<text x="${(GROUP_W + GROUP_GAP) * 3}" y="10.5" fill="${INK}">${usd(a.cost)}</text>`) +
     `</svg>`
 
   return { source, alt }
@@ -182,6 +197,7 @@ export function detailSvg(a: BandInput): { source: string; alt: string; width: n
   if (a.day?.resetsAt) say(`Day resets in ${untilReset(a.day.resetsAt, a.now)}`)
   if (a.week?.resetsAt) say(`Week resets in ${untilReset(a.week.resetsAt, a.now)}`)
   if (!a.day && !a.week) say('No limit reading yet')
+  if (a.cost !== null) say(`Session $${a.cost.toFixed(2)} at API prices`)
 
   const { legend } = contextCells(a.segments, BAR_W)
   a.segments
