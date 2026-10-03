@@ -1,7 +1,7 @@
 // A team snapshot becomes one row per person, sorted for a glance.
 
 import type { Snapshot, SnapshotSession } from '../types'
-import { OFFLINE_AFTER_MS } from './config'
+import { IDLE_AFTER_MS, OFFLINE_AFTER_MS } from './config'
 
 export type Status = 'live' | 'idle' | 'offline'
 export type SessionView = { id: string; line: string; where: string }
@@ -56,7 +56,7 @@ export function buildRows(snap: Snapshot, elapsedMs: number): Row[] {
       status === 'live'
         ? `${active.length} session${active.length === 1 ? '' : 's'}`
         : status === 'idle'
-          ? `idle ${ago(now - active[0]!.stateSince)}`
+          ? `idle ${ago(now - (active[0]!.stateSince - IDLE_AFTER_MS))}` // the state flips IDLE_AFTER_MS after the last turn
           : latest
             ? `seen ${ago(now - latest.seenAt)} ago`
             : 'not active yet'

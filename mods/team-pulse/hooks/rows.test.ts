@@ -36,7 +36,7 @@ test('live first by session count, then idle, then offline by last seen', () => 
   expect(rows.map(r => r.name)).toEqual(['Cy', 'Di', 'Bo', 'Ann'])
 })
 
-test('status text says sessions, idle time, or last seen', () => {
+test('status text says sessions, idle time counted from the last turn, or last seen', () => {
   const members = [{ id: 'a', name: 'Ann' }, { id: 'b', name: 'Bo' }, { id: 'c', name: 'Cy' }, { id: 'e', name: 'Ed' }]
   const rows = buildRows(snap([
     s({ id: '1', member: 'a', seenAt: NOW - 3 * 3_600_000 }),
@@ -44,7 +44,7 @@ test('status text says sessions, idle time, or last seen', () => {
     s({ id: '3', member: 'c' }), s({ id: '4', member: 'c' })
   ], members), 0)
   const text = Object.fromEntries(rows.map(r => [r.name, r.statusText]))
-  expect(text).toEqual({ Cy: '2 sessions', Bo: 'idle 12m', Ann: 'seen 3h ago', Ed: 'not active yet' })
+  expect(text).toEqual({ Cy: '2 sessions', Bo: 'idle 22m', Ann: 'seen 3h ago', Ed: 'not active yet' })
 })
 
 test('main session, others, where line and limits from the latest session', () => {
