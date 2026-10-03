@@ -148,7 +148,9 @@ function limitGroup(i: number, label: string, r: Reading | undefined): string {
   return group(i, label, [{ width: used.width, color: used.color! }], r.percentUsed)
 }
 
-type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; cost: number | null; now: number }
+import type { Spend } from '../types'
+
+type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; spend: Spend | null; now: number }
 
 /** Dollars cut short, never rounded up: $0.42, $3.4, $12, $1.2k, $12k. */
 export function usd(n: number): string {
@@ -168,14 +170,14 @@ export function bandSvg(a: BandInput): { source: string; alt: string } {
   const pct = (r?: Reading) => (r ? `${Math.round(r.percentUsed)}%` : 'no reading')
   const alt =
     `Day ${pct(a.day)}, Week ${pct(a.week)}, Context ${a.contextPercent === null ? 'no reading' : `${Math.round(a.contextPercent)}%`}` +
-    (a.cost === null ? '' : `, Session ${usd(a.cost)}`)
+    (a.spend === null ? '' : `, This week ${usd(a.spend.week)}`)
 
   const source =
     svgOpen(BAND_W) +
     limitGroup(0, 'Day', a.day) +
     limitGroup(1, 'Week', a.week) +
     group(2, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null) +
-    (a.cost === null ? '' : `<text x="${(GROUP_W + GROUP_GAP) * 3}" y="10.5" fill="${INK}">${usd(a.cost)}</text>`) +
+    (a.spend === null ? '' : `<text x="${(GROUP_W + GROUP_GAP) * 3}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
     `</svg>`
 
   return { source, alt }
@@ -197,7 +199,10 @@ export function detailSvg(a: BandInput): { source: string; alt: string; width: n
   if (a.day?.resetsAt) say(`Day resets in ${untilReset(a.day.resetsAt, a.now)}`)
   if (a.week?.resetsAt) say(`Week resets in ${untilReset(a.week.resetsAt, a.now)}`)
   if (!a.day && !a.week) say('No limit reading yet')
-  if (a.cost !== null) say(`Session $${a.cost.toFixed(2)} at API prices`)
+  if (a.spend !== null) {
+    const n = a.spend.sessionsToday
+    say(`Week $${a.spend.week.toFixed(2)} · today $${a.spend.today.toFixed(2)} in ${n} session${n === 1 ? '' : 's'} · this session $${a.spend.session.toFixed(2)} · API prices`)
+  }
 
   const { legend } = contextCells(a.segments, BAR_W)
   a.segments

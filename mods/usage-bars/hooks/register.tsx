@@ -1,15 +1,17 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Limit, Segment } from '../types'
+import type { Limit, Segment, Spend } from '../types'
 import { bandSvg, BAND_H, BAND_W, contextCells, detailSvg, limitCells, usd } from './bars'
 import type { Cell } from './bars'
+import { parseLedger, record, totals } from './ledger'
+import type { Ledger } from './ledger'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
 const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
 const contextPercent = atom({ plugin: 'usage-bars', key: 'contextPercent' } as const, null as number | null)
 const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limit[])
-const cost = atom({ plugin: 'usage-bars', key: 'cost' } as const, null as number | null)
+const spend = atom({ plugin: 'usage-bars', key: 'spend' } as const, null as Spend | null)
 
 const BAR = 10 // terminal bar cells
 
@@ -19,8 +21,25 @@ async function refresh($: any) {
   await update($, window_, () => u.context.breakdown?.rawMaxTokens ?? u.context.window)
   await update($, contextPercent, () => u.context.breakdown?.percentage ?? u.context.percent ?? null)
   await update($, limits, () => u.rateLimits)
-  await update($, cost, () => u.cost?.usd ?? null)
+  if (u.cost) await tally($, u.cost.usd)
   return u
+}
+
+/** Records this session's spend in its own ledger file, then sums every session's. */
+async function tally($: any, total: number) {
+  const now = await $.clock.now()
+  const dir = `${$.plugin.root}/.ledger`
+  const mine = `${dir}/${String(await $.session.id()).replace(/[^\w-]/g, '_')}.json`
+  const prev = parseLedger(await $.fs.read(mine).catch(() => undefined))
+  await $.fs.write(mine, JSON.stringify(record(prev, total, now)))
+
+  const ledgers: Ledger[] = []
+  for (const f of await $.fs.list(dir)) {
+    if (f.kind !== 'file' || !f.name.endsWith('.json')) continue
+    const l = parseLedger(await $.fs.read(`${dir}/${f.name}`).catch(() => undefined))
+    if (l) ledgers.push(l)
+  }
+  await update($, spend, () => totals(ledgers, total, now))
 }
 
 export const register: Register = on => {
@@ -41,14 +60,14 @@ export const register: Register = on => {
     const lims = await read($, limits)
     const segs = await read($, segments)
     const pct = await read($, contextPercent)
-    const usdSpent = await read($, cost)
+    const spent = await read($, spend)
 
     const day = lims.find(l => l.kind === 'five_hour')
     const week = lims.find(l => l.kind === 'seven_day')
 
     if (e.surface === 'desktop') {
       const { Box, Svg } = $.ui.resolve(e)
-      const input = { day, week, segments: segs, contextPercent: pct, cost: usdSpent, now }
+      const input = { day, week, segments: segs, contextPercent: pct, spend: spent, now }
       const band = bandSvg(input)
       const detail = detailSvg(input)
       return (
@@ -85,7 +104,7 @@ export const register: Register = on => {
         {panel('Day', day ? limitCells(day.percentUsed, BAR) : null, day?.percentUsed ?? null)}
         {panel('Week', week ? limitCells(week.percentUsed, BAR) : null, week?.percentUsed ?? null)}
         {panel('Ctx', segs.length ? contextCells(segs, BAR).cells : null, segs.length ? pct : null, true)}
-        {usdSpent === null ? null : <Text dimColor>{`   ${usd(usdSpent)}`}</Text>}
+        {spent === null ? null : <Text dimColor>{`   ${usd(spent.week)}`}</Text>}
       </Box>
     )
   })

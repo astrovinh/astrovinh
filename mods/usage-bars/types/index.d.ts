@@ -1,5 +1,6 @@
 export type Segment = { name: string; tokens: number; kind: 'used' | 'free' | 'buffer' | 'deferred' }
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
+export type Spend = { week: number; today: number; sessionsToday: number; session: number }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -8,7 +9,7 @@ declare module 'claude-code' {
       window: number
       contextPercent: number | null
       limits: Limit[]
-      cost: number | null
+      spend: Spend | null
     }
   }
 }
