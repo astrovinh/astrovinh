@@ -7,6 +7,7 @@ import type { CallResult } from './client'
 import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from './config'
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
 import { drawPanel } from './panel'
+import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { basename, buildHeartbeat } from './share'
 
@@ -25,6 +26,7 @@ let lineAt: number | null = null
 let beatFailures = 0
 let nextBeatAt = 0
 let panelOpen = false
+let readTick = 0
 let beatTimer: { cancel: () => void } | null = null
 let readTimer: { cancel: () => void } | null = null
 
@@ -76,7 +78,6 @@ async function beat($: any) {
   if (r.ok) {
     beatFailures = 0
     nextBeatAt = 0
-    $.ui.status(`Sharing: ${hb.line}`)
   } else if (r.status === 401) {
     await $.store.delete('membership')
     $.ui.status(undefined)
@@ -85,6 +86,27 @@ async function beat($: any) {
     beatFailures += 1
     nextBeatAt = now + backoffMs(beatFailures)
   }
+}
+
+/** The presence line under the prompt: teammates by shape, then your own part. */
+async function showPresence($: any) {
+  if (!(await membership($))) {
+    $.ui.status(undefined)
+    return
+  }
+  const snap = await read($, snapshot)
+  const said = (await $.store.get('said')) as string | null | undefined
+  const youLine = said || line || fallbackLine(basename(cwd), await branchOf($))
+  const at = await read($, fetchedAt)
+  $.ui.status(
+    presenceLine({
+      rows: snap ? buildRows(snap, Date.now() - at) : [],
+      youLine,
+      paused: (await $.store.get('paused')) === true,
+      problem: await read($, problem),
+      hasSnapshot: snap !== null
+    })
+  )
 }
 
 async function refresh($: any) {
@@ -101,6 +123,7 @@ async function refresh($: any) {
     // A 429 keeps the last view quietly; anything else says why.
     await update($, problem, () => r.message)
   }
+  await showPresence($)
 }
 
 async function writeLine($: any) {
@@ -113,7 +136,7 @@ async function writeLine($: any) {
   const clean = r && r.isAnswered ? cleanLine(r.text) : null
   if (clean && clean !== line) {
     line = clean
-    $.ui.toast(`Sharing with your team: "${clean}" \u00b7 /team pause to stop`)
+    await showPresence($)
   }
 }
 
@@ -144,7 +167,7 @@ async function runCommand($: any, args: string): Promise<string> {
       if (!r.ok) return r.message
       await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: name.join(' '), isAdmin: true, joinCode: r.data.joinCode })
       nextBeatAt = 0
-      void beat($).catch(() => {})
+      await beat($).catch(() => {})
       await openPanel($)
       return `Created ${r.data.team}. Teammates join with: /team join ${r.data.joinCode} <their name>`
     }
@@ -156,7 +179,7 @@ async function runCommand($: any, args: string): Promise<string> {
       if (!r.ok) return r.message
       await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: name.join(' '), isAdmin: false })
       nextBeatAt = 0
-      void beat($).catch(() => {})
+      await beat($).catch(() => {})
       await openPanel($)
       return `Joined ${r.data.team}. Your sessions are shared from now on; /team pause stops it.`
     }
@@ -170,18 +193,20 @@ async function runCommand($: any, args: string): Promise<string> {
     }
     case 'pause':
       await $.store.set('paused', true)
-      $.ui.status(undefined)
+      await showPresence($)
       return 'Sharing paused on this Mac. Teammates will see you as offline. /team resume starts it again.'
     case 'resume':
       await $.store.set('paused', false)
       nextBeatAt = 0
       void beat($).catch(() => {})
+      await showPresence($)
       return 'Sharing resumed.'
     case 'say': {
       const text = rest.join(' ').replace(/^["']|["']$/g, '').trim()
       await $.store.set('said', text || null)
       nextBeatAt = 0
       void beat($).catch(() => {})
+      await showPresence($)
       return text ? `Your line is now "${text}". /team say with nothing after it goes back to automatic lines.` : 'Back to automatic lines.'
     }
     case 'code': {
@@ -218,9 +243,12 @@ export const register: Register = on => {
     beatTimer?.cancel()
     readTimer?.cancel()
     beatTimer = $.clock.every(HEARTBEAT_MS, () => void beat($).catch(() => {}))
+    // The panel needs fresh reads every tick; the presence line alone is fine with every second one.
     readTimer = $.clock.every(READ_MS, () => {
-      if (panelOpen) void refresh($).catch(() => {})
+      readTick += 1
+      if (panelOpen || readTick % 2 === 0) void refresh($).catch(() => {})
     })
+    void refresh($).catch(() => {})
     return next(e)
   })
 

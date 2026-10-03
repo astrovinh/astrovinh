@@ -12,7 +12,7 @@ While a session is open, every 60 seconds, your team pulse mod shares this with 
 - your 5-hour and weekly Claude limit percentages
 - how many sessions you have open, how long each has been open, and when you were active over the last 12 hours
 
-The summary is made from your latest prompt by a small Claude model, called through your own Claude login, the same way your prompts already reach Claude. The prompt itself is never sent to the team server. Each new summary appears to you in a toast; `/team say <text>` replaces it with your own words, and `/team pause` stops sharing.
+The summary is made from your latest prompt by a small Claude model, called through your own Claude login, the same way your prompts already reach Claude. The prompt itself is never sent to the team server. Your current summary is always shown under your prompt, after your teammates' names; `/team say <text>` replaces it with your own words, and `/team pause` stops sharing.
 
 Never shared: your prompts, Claude's replies, code, file paths beyond the folder name, or cost.
 
