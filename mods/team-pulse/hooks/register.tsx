@@ -88,20 +88,17 @@ async function beat($: any) {
   }
 }
 
-/** The presence line under the prompt: teammates by shape, then your own part. */
+/** The presence line under the prompt: teammates who are online. */
 async function showPresence($: any) {
   if (!(await membership($))) {
     $.ui.status(undefined)
     return
   }
   const snap = await read($, snapshot)
-  const said = (await $.store.get('said')) as string | null | undefined
-  const youLine = said || line || fallbackLine(basename(cwd), await branchOf($))
   const at = await read($, fetchedAt)
   $.ui.status(
     presenceLine({
       rows: snap ? buildRows(snap, Date.now() - at) : [],
-      youLine,
       paused: (await $.store.get('paused')) === true,
       problem: await read($, problem),
       hasSnapshot: snap !== null
