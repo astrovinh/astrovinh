@@ -22,11 +22,23 @@ test('the reply is cleaned: first line, no quotes, no end punctuation, capped', 
 })
 
 test('without a line, project and branch stand in', () => {
-  expect(fallbackLine('mobile-app', 'fix/x')).toBe('mobile-app · fix/x')
+  expect(fallbackLine('mobile-app', 'fix/x')).toBe('mobile-app \u00b7 fix/x')
   expect(fallbackLine('mobile-app', '')).toBe('mobile-app')
 })
 
 test('curly quotes are stripped too', () => {
-  expect(cleanLine('“Fix purchase restore on iOS”')).toBe('Fix purchase restore on iOS')
-  expect(cleanLine('‘Tuning prompts’')).toBe('Tuning prompts')
+  expect(cleanLine('\u201cFix purchase restore on iOS\u201d')).toBe('Fix purchase restore on iOS')
+  expect(cleanLine('\u2018Tuning prompts\u2019')).toBe('Tuning prompts')
+})
+
+test('NONE means there was nothing to summarize, so no line', () => {
+  expect(cleanLine('NONE')).toBe(null)
+  expect(cleanLine('none.')).toBe(null)
+  expect(cleanLine('"NONE"')).toBe(null)
+  expect(cleanLine('Fixing purchase restore on iOS')).toBe('Fixing purchase restore on iOS')
+  expect(cleanLine('None of the tests pass yet')).toBe('None of the tests pass yet')
+})
+
+test('the request lets the model say there is nothing to summarize', () => {
+  expect(lineRequest('hi').system.includes('reply with exactly NONE')).toBe(true)
 })

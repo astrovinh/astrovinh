@@ -61,11 +61,11 @@ export function drawPanel(
               <Text dimColor>{r.statusText}</Text>
             </Box>
             {r.note && surface === 'desktop' && Svg ? (
-              <Box paddingLeft={2}>
+              <Box marginBottom={1}>
                 <Svg {...bubbleSvg(r.note, r.noteAge, 290)} />
               </Box>
             ) : r.note ? (
-              <Box paddingLeft={2}>
+              <Box marginBottom={1}>
                 <Box flexShrink={0}>
                   <Text color={BUBBLE}>{'\u25e4'}</Text>
                 </Box>
