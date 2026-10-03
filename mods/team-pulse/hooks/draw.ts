@@ -63,3 +63,43 @@ export function textBar(p: number | null, cells: number): string {
   const on = Math.round((cells * Math.max(0, Math.min(100, p))) / 100)
   return '\u2501'.repeat(on) + '\u2500'.repeat(cells - on)
 }
+
+const BUBBLE_FILL = '#34332e'
+const BUBBLE_EDGE = '#45433d'
+const BUBBLE_PAD = 20
+export const BUBBLE_H = 26
+
+/** Estimated width in px of a string at font-size 11.5 in the system font; the SVG cannot measure text itself. */
+export function noteWidth(s: string): number {
+  let w = 0
+  for (const ch of s) {
+    const c = ch.codePointAt(0)!
+    w += c > 0x2000 ? 14 : ch === ' ' ? 3.1 : ch >= '0' && ch <= '9' ? 6.6 : ch >= 'A' && ch <= 'Z' ? 7.5 : ch >= 'a' && ch <= 'z' ? 5.9 : 4.6
+  }
+  return w * 1.05
+}
+
+/** A chat bubble with a tail pointing up at the name. The note is cut to fit; the age never is. */
+export function bubbleSvg(note: string, age: string | null, maxWidth: number): { source: string; alt: string; width: number; height: number } {
+  const ageText = age ? ` \u00b7 ${age}` : ''
+  const room = maxWidth - BUBBLE_PAD - noteWidth(ageText)
+  let chars = Array.from(note)
+  let shown = note
+  if (noteWidth(note) > room) {
+    while (chars.length > 0 && noteWidth(chars.join('') + '\u2026') > room) chars = chars.slice(0, -1)
+    shown = chars.join('') + '\u2026'
+  }
+  // A cut note fills the whole width; the loop above stops up to one character short of it.
+  const width = shown === note ? Math.min(maxWidth, Math.ceil(noteWidth(shown) + noteWidth(ageText) + BUBBLE_PAD)) : maxWidth
+  const source =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${BUBBLE_H}" viewBox="0 0 ${width} ${BUBBLE_H}" ` +
+    `font-family="-apple-system,BlinkMacSystemFont,'Apple Color Emoji','Segoe UI',system-ui,sans-serif" font-size="11.5">` +
+    `<rect x="0.5" y="6.5" width="${width - 1}" height="19" rx="10" fill="${BUBBLE_FILL}" stroke="${BUBBLE_EDGE}" stroke-width="1"/>` +
+    // The tail's fill hides the rect's top edge under it; only its two upper edges are stroked.
+    `<path d="M12 7 L12 6.5 L17 0.5 L22 6.5 L22 7 Z" fill="${BUBBLE_FILL}"/>` +
+    `<path d="M12 6.5 L17 0.5 L22 6.5" fill="none" stroke="${BUBBLE_EDGE}" stroke-width="1" stroke-linejoin="round"/>` +
+    `<text x="10" y="20" xml:space="preserve"><tspan fill="#ecebe6">${esc(shown)}</tspan>` +
+    (ageText ? `<tspan fill="${INK}">${esc(ageText)}</tspan>` : '') +
+    `</text></svg>`
+  return { source, alt: esc(`Status: ${note}${age ? `, ${age}` : ''}`), width, height: BUBBLE_H }
+}

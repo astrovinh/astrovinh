@@ -1,7 +1,7 @@
 // The team panel: one row per person. Desktop draws bars and the strip as SVG; the terminal uses characters.
 
 import type { Snapshot } from '../types'
-import { ROW_SVG_H, ROW_SVG_W, rowSvg, textBar } from './draw'
+import { bubbleSvg, ROW_SVG_H, ROW_SVG_W, rowSvg, textBar } from './draw'
 import type { Row } from './rows'
 import { ago } from './rows'
 import { cap } from './share'
@@ -57,11 +57,14 @@ export function drawPanel(
               <Text>
                 <Text color={DOT[r.status]}>{'\u25cf '}</Text>
                 <Text bold>{r.name}</Text>
-                {r.you ? <Text dimColor>{' (you)'}</Text> : null}
               </Text>
               <Text dimColor>{r.statusText}</Text>
             </Box>
-            {r.note ? (
+            {r.note && surface === 'desktop' && Svg ? (
+              <Box paddingLeft={2}>
+                <Svg {...bubbleSvg(r.note, r.noteAge, 290)} />
+              </Box>
+            ) : r.note ? (
               <Box paddingLeft={2}>
                 <Box flexShrink={0}>
                   <Text color={BUBBLE}>{'\u25e4'}</Text>
