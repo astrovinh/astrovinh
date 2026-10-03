@@ -1,0 +1,6 @@
+{
+  "name": "team-pulse",
+  "version": "0.1.0",
+  "description": "See which teammates are running Claude Code, what they are working on, and their limits, in a side panel opened with /team.",
+  "types": "./types/index.d.ts"
+}
