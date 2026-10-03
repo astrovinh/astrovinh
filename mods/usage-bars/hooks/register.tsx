@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment } from '../types'
-import { contextCells, labelFor, limitCells, untilReset } from './bars'
+import { bandSvg, BAND_H, BAND_W, contextCells, detailSvg, limitCells } from './bars'
 import type { Cell } from './bars'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
@@ -10,9 +10,7 @@ const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
 const contextPercent = atom({ plugin: 'usage-bars', key: 'contextPercent' } as const, null as number | null)
 const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limit[])
 
-const GAP = 2
-const LABEL = 5 // "Day  "
-const PCT = 5 // " 100%"
+const BAR = 10 // terminal bar cells
 
 async function refresh($: any) {
   const u = await $.session.usage({ breakdown: 'summary' })
@@ -20,6 +18,7 @@ async function refresh($: any) {
   await update($, window_, () => u.context.breakdown?.rawMaxTokens ?? u.context.window)
   await update($, contextPercent, () => u.context.breakdown?.percentage ?? u.context.percent ?? null)
   await update($, limits, () => u.rateLimits)
+  return u
 }
 
 export const register: Register = on => {
@@ -36,7 +35,6 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
 
-    const { Box, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
     const lims = await read($, limits)
     const segs = await read($, segments)
@@ -44,54 +42,46 @@ export const register: Register = on => {
 
     const day = lims.find(l => l.kind === 'five_hour')
     const week = lims.find(l => l.kind === 'seven_day')
-    const others = lims.filter(l => l.kind !== 'five_hour' && l.kind !== 'seven_day')
 
-    const cols = Math.max(30, e.props.bodyColumns)
-    const panels = 3
-    const panelWidth = Math.floor((cols - GAP * (panels - 1)) / panels)
-    const barWidth = Math.max(4, panelWidth - LABEL - PCT)
+    if (e.surface === 'desktop') {
+      const { Box, Svg } = $.ui.resolve(e)
+      const input = { day, week, segments: segs, contextPercent: pct, now }
+      const band = bandSvg(input)
+      const detail = detailSvg(input)
+      return (
+        <Box key="usage-bars" flexDirection="column" paddingX={1}>
+          <Svg source={band.source} alt={band.alt} width={BAND_W} height={BAND_H} />
+          <Box display="none" hover={{ display: 'flex' }}>
+            <Svg source={detail.source} alt={detail.alt} width={detail.width} height={BAND_H} />
+          </Box>
+        </Box>
+      )
+    }
+
+    const { Box, Text } = $.ui.resolve(e)
 
     const drawCells = (cells: Cell[]) =>
       cells
         .filter(c => c.width > 0)
         .map((c, i) => (
-          <Text key={i} color={c.color} dimColor={c.dim}>
+          <Text key={String(i)} color={c.color} dimColor={c.dim}>
             {c.glyph.repeat(c.width)}
           </Text>
         ))
 
-    const limitPanel = (label: string, l: Limit | undefined) => (
-      <Box width={panelWidth} marginRight={GAP}>
-        <Text bold>{label.padEnd(LABEL)}</Text>
-        {l ? drawCells(limitCells(l.percentUsed, barWidth)) : <Text dimColor>{'·'.repeat(barWidth)}</Text>}
-        <Text>{l ? ` ${Math.round(l.percentUsed)}%`.padStart(PCT) : ' n/a'.padStart(PCT)}</Text>
+    const panel = (label: string, cells: Cell[] | null, value: number | null, last = false) => (
+      <Box marginRight={last ? 0 : 3}>
+        <Text dimColor>{label} </Text>
+        {cells ? drawCells(cells) : <Text dimColor>{'━'.repeat(BAR)}</Text>}
+        <Text dimColor>{value === null ? ' –' : ` ${Math.round(value)}%`}</Text>
       </Box>
     )
 
-    const ctx = contextCells(segs, barWidth)
-
-    const resets = [day && ['Day', day] as const, week && ['Wk', week] as const]
-      .filter(Boolean)
-      .map(r => `${r![0]} resets ${untilReset(r![1].resetsAt, now)}`)
-      .concat(others.map(o => `${labelFor(o.kind)} ${Math.round(o.percentUsed)}%`))
-
     return (
-      <Box flexDirection="column">
-        <Box>
-          {limitPanel('Day', day)}
-          {limitPanel('Week', week)}
-          <Box width={panelWidth}>
-            <Text bold>{'Ctx'.padEnd(LABEL)}</Text>
-            {segs.length ? drawCells(ctx.cells) : <Text dimColor>{'·'.repeat(barWidth)}</Text>}
-            <Text>{pct === null ? ' n/a'.padStart(PCT) : ` ${Math.round(pct)}%`.padStart(PCT)}</Text>
-          </Box>
-        </Box>
-        <Box>
-          <Text dimColor wrap="truncate">{resets.join(' · ')}{resets.length ? ' · ' : ''}</Text>
-          {ctx.legend.map((g, i) => (
-            <Text key={i} color={g.color}>■ <Text dimColor>{g.name} </Text></Text>
-          ))}
-        </Box>
+      <Box>
+        {panel('Day', day ? limitCells(day.percentUsed, BAR) : null, day?.percentUsed ?? null)}
+        {panel('Week', week ? limitCells(week.percentUsed, BAR) : null, week?.percentUsed ?? null)}
+        {panel('Ctx', segs.length ? contextCells(segs, BAR).cells : null, segs.length ? pct : null, true)}
       </Box>
     )
   })
