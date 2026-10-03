@@ -54,23 +54,24 @@ export function drawPanel(
         return (
           <Box key={`row:${r.id}`} flexDirection="column" paddingX={2} paddingY={1}>
             <Box justifyContent="space-between">
-              <Box flexGrow={1} flexShrink={1}>
-                <Text wrap="truncate-end">
-                  <Text color={DOT[r.status]}>{'\u25cf '}</Text>
-                  <Text bold>{r.name}</Text>
-                  {r.you ? <Text dimColor>{' (you)'}</Text> : null}
-                </Text>
-                {r.note ? (
-                  <Text wrap="truncate">
-                    <Text>{' '}</Text>
-                    <Text color={BUBBLE}>{'\u25c2'}</Text>
-                    <Text color={BUBBLE_TEXT} backgroundColor={BUBBLE}>{` ${cap(r.note, 40)} `}</Text>
-                    {r.noteAge ? <Text dimColor backgroundColor={BUBBLE}>{` \u00b7 ${r.noteAge} `}</Text> : null}
-                  </Text>
-                ) : null}
-              </Box>
+              <Text>
+                <Text color={DOT[r.status]}>{'\u25cf '}</Text>
+                <Text bold>{r.name}</Text>
+                {r.you ? <Text dimColor>{' (you)'}</Text> : null}
+              </Text>
               <Text dimColor>{r.statusText}</Text>
             </Box>
+            {r.note ? (
+              <Box paddingLeft={2}>
+                <Box flexShrink={0}>
+                  <Text color={BUBBLE}>{'\u25e4'}</Text>
+                </Box>
+                <Text wrap="truncate" color={BUBBLE_TEXT} backgroundColor={BUBBLE}>
+                  {` ${cap(r.note, 40)} `}
+                  {r.noteAge ? <Text dimColor>{` \u00b7 ${r.noteAge} `}</Text> : null}
+                </Text>
+              </Box>
+            ) : null}
             {r.main ? <Text wrap="truncate">{r.main.line}</Text> : <Text dimColor>Not running Claude Code</Text>}
             {r.main ? <Text dimColor wrap="truncate">{r.main.where}</Text> : null}
             {surface === 'desktop' && Svg ? (
