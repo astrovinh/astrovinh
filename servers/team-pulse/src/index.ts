@@ -48,6 +48,10 @@ export default {
     switch (route) {
       case 'POST join':
         return json(await t.join(body, now))
+      case 'PUT sessions/:id':
+        return json(await t.heartbeat(key, decodeURIComponent(parts[3] ?? ''), body, now))
+      case 'GET ':
+        return json(await t.snapshot(key, now))
       default:
         return json({ status: 404, body: { error: 'Not found' } })
     }

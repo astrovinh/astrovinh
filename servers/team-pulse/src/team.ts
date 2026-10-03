@@ -82,4 +82,70 @@ export class Team extends DurableObject {
     if (!m) return fail(409, `Someone on the team is already called ${name}. Join with a different name.`)
     return ok({ teamId: this.meta('id'), team: this.meta('team'), memberId: m.id, key: m.key, isAdmin: false })
   }
+  static readonly OFFLINE_AFTER_MS = 150_000
+  static readonly KEEP_MS = 7 * 86_400_000
+  static readonly WINDOW_MS = 12 * 3_600_000
+
+  protected async me(key: string): Promise<{ id: string; name: string; isAdmin: boolean } | null> {
+    if (!key) return null
+    const r = this.sql.exec('SELECT id, name, is_admin FROM members WHERE key_hash = ?', await sha256(key)).toArray()[0]
+    return r ? { id: String(r.id), name: String(r.name), isAdmin: Number(r.is_admin) === 1 } : null
+  }
+
+  protected prune(now: number) {
+    this.sql.exec('DELETE FROM segments WHERE end_at < ?', now - Team.KEEP_MS)
+    this.sql.exec('DELETE FROM sessions WHERE seen_at < ?', now - Team.KEEP_MS)
+  }
+
+  async heartbeat(key: string, sessionId: string, body: any, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    const sid = text(sessionId, CAPS.session)
+    if (!sid || !/^[A-Za-z0-9_-]+$/.test(sid)) return fail(400, 'Bad session id')
+    if (this.limited(`hb:${sid}`, 2, now)) return fail(429, 'Too many heartbeats')
+    const existing = this.sql.exec('SELECT member, state, state_since FROM sessions WHERE id = ?', sid).toArray()[0]
+    if (existing && String(existing.member) !== me.id) return fail(403, 'That session belongs to someone else')
+
+    const state = body?.state === 'idle' ? 'idle' : 'working'
+    const since = existing && String(existing.state) === state ? Number(existing.state_since) : now
+    const pct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null)
+    const startedAt = typeof body?.startedAt === 'number' && Number.isFinite(body.startedAt) ? body.startedAt : now
+    this.sql.exec(
+      `INSERT INTO sessions (id, member, project, branch, line, state, state_since, five_hour, week, started_at, seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET project = excluded.project, branch = excluded.branch, line = excluded.line,
+         state = excluded.state, state_since = excluded.state_since, five_hour = excluded.five_hour, week = excluded.week,
+         started_at = excluded.started_at, seen_at = excluded.seen_at`,
+      sid, me.id, text(body?.project, CAPS.project), text(body?.branch, CAPS.branch), text(body?.line, CAPS.line),
+      state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now
+    )
+
+    const last = this.sql.exec('SELECT rowid AS rid, end_at FROM segments WHERE session = ? ORDER BY end_at DESC LIMIT 1', sid).toArray()[0]
+    if (last && now - Number(last.end_at) < Team.OFFLINE_AFTER_MS) this.sql.exec('UPDATE segments SET end_at = ? WHERE rowid = ?', now, last.rid)
+    else this.sql.exec('INSERT INTO segments (session, member, start_at, end_at) VALUES (?, ?, ?, ?)', sid, me.id, now, now)
+
+    this.prune(now)
+    return ok({ ok: true })
+  }
+
+  async snapshot(key: string, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (this.limited(`rd:${me.id}`, 10, now)) return fail(429, 'Too many reads')
+    const members = this.sql.exec('SELECT id, name FROM members ORDER BY joined_at, rowid').toArray()
+    const sessions = this.sql.exec('SELECT * FROM sessions ORDER BY seen_at DESC').toArray()
+    const segments = this.sql.exec('SELECT session, member, start_at, end_at FROM segments WHERE end_at >= ? ORDER BY start_at', now - Team.WINDOW_MS).toArray()
+    return ok({
+      team: this.meta('team'),
+      now,
+      you: me.id,
+      members: members.map(m => ({ id: String(m.id), name: String(m.name) })),
+      sessions: sessions.map(s => ({
+        id: String(s.id), member: String(s.member), project: String(s.project), branch: String(s.branch), line: String(s.line),
+        state: String(s.state), stateSince: Number(s.state_since), fiveHour: s.five_hour === null ? null : Number(s.five_hour),
+        week: s.week === null ? null : Number(s.week), startedAt: Number(s.started_at), seenAt: Number(s.seen_at)
+      })),
+      segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at) }))
+    })
+  }
 }
