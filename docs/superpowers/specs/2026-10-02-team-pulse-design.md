@@ -131,10 +131,12 @@ Not verifiable alone: behaviour on teammates' Macs and accounts until that first
 
 ## Open items to settle in the first build step
 
-1. Can a mod own a global shortcut (ctrl+x t)? If not, `/team` only.
-2. Do `$.http.fetch` calls to our Worker need a per-host approval from each person?
-3. Where the "Sharing:" note draws next to `usage-bars`.
-4. Which small model `$.model.complete` uses by default, and its cost per line.
+Settled by the spike on 2026-10-02 (probe run headless with `claude -p`, Claude Code 2.1.287):
+
+- Shortcut: not possible in this build (no keybinding API for mods). `/team` only.
+- Fetch: `$.http.fetch` to `http://127.0.0.1:8799/ping` returned status 200, ok true, body "pong", with no permission prompt or error. Caveat: this was a headless run against a local address, so a prompt for a remote host in an interactive session is not ruled out. If the first real `/team` call shows one, add to the README in Task 12: "the first `/team` asks you to allow the team server once".
+- Command name: `teamTaken` is false, so `/team` stays. No rename to `/pulse` needed.
+- Sharing note: shown as a toast when the shared line changes plus `$.ui.status`, so it never competes with usage-bars above the prompt.
 
 ## Out of scope
 
