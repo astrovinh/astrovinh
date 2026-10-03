@@ -32,4 +32,16 @@ describe('leaving, removing and rotating', () => {
     expect((await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'Bao' } })).status).toBe(403)
     expect((await api('POST', `/teams/${teamId}/join`, { body: { code: fresh, name: 'Bao' } })).status).toBe(200)
   })
+
+  it('when the admin leaves, the longest-standing member becomes admin', async () => {
+    const { teamId, admin, linh } = await newTeam()
+    expect((await api('POST', `/teams/${teamId}/leave`, { key: admin.key })).status).toBe(200)
+    expect((await api('POST', `/teams/${teamId}/code`, { key: linh.key })).status).toBe(200)
+  })
+
+  it('an admin removing themselves hands admin on the same way', async () => {
+    const { teamId, admin, linh } = await newTeam()
+    expect((await api('DELETE', `/teams/${teamId}/members/${admin.memberId}`, { key: admin.key })).status).toBe(200)
+    expect((await api('POST', `/teams/${teamId}/code`, { key: linh.key })).status).toBe(200)
+  })
 })

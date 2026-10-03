@@ -153,6 +153,12 @@ export class Team extends DurableObject {
     this.sql.exec('DELETE FROM segments WHERE member = ?', id)
     this.sql.exec('DELETE FROM sessions WHERE member = ?', id)
     this.sql.exec('DELETE FROM members WHERE id = ?', id)
+    const hasAdmin = this.sql.exec('SELECT 1 FROM members WHERE is_admin = 1').toArray().length > 0
+    const hasMembers = this.sql.exec('SELECT 1 FROM members').toArray().length > 0
+    if (!hasAdmin && hasMembers) {
+      const next = this.sql.exec('SELECT id FROM members ORDER BY joined_at, rowid LIMIT 1').toArray()[0]
+      if (next) this.sql.exec('UPDATE members SET is_admin = 1 WHERE id = ?', String(next.id))
+    }
   }
 
   async leave(key: string): Promise<Res> {
