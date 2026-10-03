@@ -25,3 +25,8 @@ test('without a line, project and branch stand in', () => {
   expect(fallbackLine('mobile-app', 'fix/x')).toBe('mobile-app · fix/x')
   expect(fallbackLine('mobile-app', '')).toBe('mobile-app')
 })
+
+test('curly quotes are stripped too', () => {
+  expect(cleanLine('“Fix purchase restore on iOS”')).toBe('Fix purchase restore on iOS')
+  expect(cleanLine('‘Tuning prompts’')).toBe('Tuning prompts')
+})

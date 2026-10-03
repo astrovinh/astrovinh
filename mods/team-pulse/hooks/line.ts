@@ -17,7 +17,7 @@ export function lineRequest(prompt: string) {
 
 export function cleanLine(text: string): string | null {
   const first = (text.split('\n').find(l => l.trim()) ?? '').trim()
-  const bare = first.replace(/^["'""''`]+|["'""''`]+$/g, '').replace(/[.!?;:,]+$/, '').trim()
+  const bare = first.replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').replace(/[.!?;:,]+$/, '').trim()
   return bare ? cap(bare, LIMITS.line) : null
 }
 
