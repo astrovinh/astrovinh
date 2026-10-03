@@ -81,7 +81,7 @@ Never sent: prompts, model replies, code, file paths beyond the folder name, cos
 - Auth: every call carries `Authorization: Bearer <key>`. Create returns an admin key and a join code. Join returns a member key. The server stores only SHA-256 hashes of keys.
 - A member can write only their own sessions. Reads are members only.
 - Size caps per field as above; request bodies over 2 KB are rejected.
-- Rate limits: 2 heartbeats a minute per session, 6 reads a minute per key (enough for the panel open in three sessions).
+- Rate limits: 2 heartbeats a minute per session, 10 reads a minute per key (so the panel opening in three sessions never trips it).
 - Retention: latest heartbeat per session; session segments (start, end) for 7 days; older rows deleted on each write. `leave` and admin removal delete that member's rows at once.
 - Segments: a heartbeat extends the open segment when it arrives within 150 s of the last one; otherwise it starts a new segment.
 

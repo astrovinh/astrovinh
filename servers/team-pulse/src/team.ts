@@ -148,4 +148,34 @@ export class Team extends DurableObject {
       segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at) }))
     })
   }
+
+  protected deleteMember(id: string) {
+    this.sql.exec('DELETE FROM segments WHERE member = ?', id)
+    this.sql.exec('DELETE FROM sessions WHERE member = ?', id)
+    this.sql.exec('DELETE FROM members WHERE id = ?', id)
+  }
+
+  async leave(key: string): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    this.deleteMember(me.id)
+    return ok({ ok: true })
+  }
+
+  async remove(key: string, memberId: string): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (!me.isAdmin) return fail(403, 'Only the team admin can remove someone')
+    this.deleteMember(memberId)
+    return ok({ ok: true })
+  }
+
+  async rotate(key: string): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (!me.isAdmin) return fail(403, 'Only the team admin can change the join code')
+    const code = randomId(8)
+    this.setMeta('code', code)
+    return ok({ joinCode: `${this.meta('id')}.${code}` })
+  }
 }

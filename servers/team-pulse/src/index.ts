@@ -52,6 +52,12 @@ export default {
         return json(await t.heartbeat(key, decodeURIComponent(parts[3] ?? ''), body, now))
       case 'GET ':
         return json(await t.snapshot(key, now))
+      case 'POST leave':
+        return json(await t.leave(key))
+      case 'DELETE members/:id':
+        return json(await t.remove(key, decodeURIComponent(parts[3] ?? '')))
+      case 'POST code':
+        return json(await t.rotate(key))
       default:
         return json({ status: 404, body: { error: 'Not found' } })
     }
