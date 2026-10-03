@@ -62,6 +62,8 @@ export default {
         if (sid === null) return json({ status: 400, body: { error: 'Bad session id' } })
         return json(await t.heartbeat(key, sid, body, now))
       }
+      case 'PUT status':
+        return json(await t.setStatus(key, body, now))
       case 'GET ':
         return json(await t.snapshot(key, now))
       case 'POST leave':

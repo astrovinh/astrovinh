@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers'
 import { fail, nameKey, ok, randomHex, randomId, safeEqual, sha256, text } from './util'
 import type { Res } from './util'
 
-export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120 } as const
+export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 80 } as const
 
 export class Team extends DurableObject {
   sql: SqlStorage
@@ -21,6 +21,10 @@ export class Team extends DurableObject {
       CREATE INDEX IF NOT EXISTS segments_end ON segments (end_at);
       CREATE INDEX IF NOT EXISTS sessions_seen ON sessions (seen_at);
     `)
+    // Teams created before the away status existed already have a members table without these columns.
+    const cols = this.sql.exec('PRAGMA table_info(members)').toArray().map(r => String(r.name))
+    if (!cols.includes('status')) this.sql.exec("ALTER TABLE members ADD COLUMN status TEXT NOT NULL DEFAULT ''")
+    if (!cols.includes('status_at')) this.sql.exec('ALTER TABLE members ADD COLUMN status_at INTEGER NOT NULL DEFAULT 0')
   }
 
   protected meta(k: string): string | null {
@@ -140,7 +144,7 @@ export class Team extends DurableObject {
     const me = await this.me(key)
     if (!me) return fail(401, 'Not a member of this team')
     if (this.limited(`rd:${me.id}`, 10, now)) return fail(429, 'Too many reads')
-    const members = this.sql.exec('SELECT id, name FROM members ORDER BY joined_at, rowid').toArray()
+    const members = this.sql.exec('SELECT id, name, status, status_at FROM members ORDER BY joined_at, rowid').toArray()
     // Sessions seen in the last 12 hours, plus each member's most recent one of any age ("seen 2d ago").
     const sessions = this.sql
       .exec(
@@ -155,7 +159,10 @@ export class Team extends DurableObject {
       team: this.meta('team'),
       now,
       you: me.id,
-      members: members.map(m => ({ id: String(m.id), name: String(m.name) })),
+      members: members.map(m => ({
+        id: String(m.id), name: String(m.name),
+        status: String(m.status) || null, statusAt: String(m.status) ? Number(m.status_at) : null
+      })),
       sessions: sessions.map(s => ({
         id: String(s.id), member: String(s.member), project: String(s.project), branch: String(s.branch), line: String(s.line),
         state: String(s.state), stateSince: Number(s.state_since), fiveHour: s.five_hour === null ? null : Number(s.five_hour),
@@ -163,6 +170,17 @@ export class Team extends DurableObject {
       })),
       segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at) }))
     })
+  }
+
+  /** Sets or clears the caller's own away status. An empty result clears it. */
+  async setStatus(key: string, body: any, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (this.limited(`st:${me.id}`, 6, now)) return fail(429, 'Too many status changes. Wait a minute.')
+    const status = text(body?.status, CAPS.status)
+    if (status) this.sql.exec('UPDATE members SET status = ?, status_at = ? WHERE id = ?', status, now, me.id)
+    else this.sql.exec("UPDATE members SET status = '', status_at = 0 WHERE id = ?", me.id)
+    return ok({ ok: true, status: status || null })
   }
 
   protected deleteMember(id: string) {
