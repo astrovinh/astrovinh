@@ -17,6 +17,9 @@ export class Team extends DurableObject {
       CREATE UNIQUE INDEX IF NOT EXISTS members_name_key ON members (name_key);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, member TEXT NOT NULL, project TEXT NOT NULL, branch TEXT NOT NULL, line TEXT NOT NULL, state TEXT NOT NULL, state_since INTEGER NOT NULL, five_hour REAL, week REAL, started_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS segments (session TEXT NOT NULL, member TEXT NOT NULL, start_at INTEGER NOT NULL, end_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS segments_session_end ON segments (session, end_at);
+      CREATE INDEX IF NOT EXISTS segments_end ON segments (end_at);
+      CREATE INDEX IF NOT EXISTS sessions_seen ON sessions (seen_at);
     `)
   }
 
@@ -84,6 +87,7 @@ export class Team extends DurableObject {
   }
   static readonly OFFLINE_AFTER_MS = 150_000
   static readonly KEEP_MS = 7 * 86_400_000
+  static readonly PRUNE_EVERY_MS = 3_600_000
   static readonly WINDOW_MS = 12 * 3_600_000
 
   protected async me(key: string): Promise<{ id: string; name: string; isAdmin: boolean } | null> {
@@ -92,9 +96,12 @@ export class Team extends DurableObject {
     return r ? { id: String(r.id), name: String(r.name), isAdmin: Number(r.is_admin) === 1 } : null
   }
 
+  /** Deletes rows older than KEEP_MS, at most once an hour. */
   protected prune(now: number) {
+    if (now - Number(this.meta('pruned_at') ?? 0) < Team.PRUNE_EVERY_MS) return
     this.sql.exec('DELETE FROM segments WHERE end_at < ?', now - Team.KEEP_MS)
     this.sql.exec('DELETE FROM sessions WHERE seen_at < ?', now - Team.KEEP_MS)
+    this.setMeta('pruned_at', String(now))
   }
 
   async heartbeat(key: string, sessionId: string, body: any, now: number): Promise<Res> {
@@ -102,9 +109,10 @@ export class Team extends DurableObject {
     if (!me) return fail(401, 'Not a member of this team')
     const sid = text(sessionId, CAPS.session)
     if (!sid || !/^[A-Za-z0-9_-]+$/.test(sid)) return fail(400, 'Bad session id')
-    if (this.limited(`hb:${sid}`, 2, now)) return fail(429, 'Too many heartbeats')
     const existing = this.sql.exec('SELECT member, state, state_since FROM sessions WHERE id = ?', sid).toArray()[0]
     if (existing && String(existing.member) !== me.id) return fail(403, 'That session belongs to someone else')
+    // Charged only after the ownership check, so a teammate cannot use up this session's allowance.
+    if (this.limited(`hb:${sid}`, 2, now)) return fail(429, 'Too many heartbeats')
 
     const state = body?.state === 'idle' ? 'idle' : 'working'
     const since = existing && String(existing.state) === state ? Number(existing.state_since) : now
@@ -133,7 +141,15 @@ export class Team extends DurableObject {
     if (!me) return fail(401, 'Not a member of this team')
     if (this.limited(`rd:${me.id}`, 10, now)) return fail(429, 'Too many reads')
     const members = this.sql.exec('SELECT id, name FROM members ORDER BY joined_at, rowid').toArray()
-    const sessions = this.sql.exec('SELECT * FROM sessions ORDER BY seen_at DESC').toArray()
+    // Sessions seen in the last 12 hours, plus each member's most recent one of any age ("seen 2d ago").
+    const sessions = this.sql
+      .exec(
+        `SELECT * FROM sessions WHERE seen_at >= ?
+           OR id IN (SELECT (SELECT s.id FROM sessions s WHERE s.member = m.id ORDER BY s.seen_at DESC, s.rowid DESC LIMIT 1) FROM members m)
+         ORDER BY seen_at DESC`,
+        now - Team.WINDOW_MS
+      )
+      .toArray()
     const segments = this.sql.exec('SELECT session, member, start_at, end_at FROM segments WHERE end_at >= ? ORDER BY start_at', now - Team.WINDOW_MS).toArray()
     return ok({
       team: this.meta('team'),

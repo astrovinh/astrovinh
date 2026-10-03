@@ -12,6 +12,15 @@ export interface Env {
 const MAX_BODY = 2048
 const TEAM_ID = /^[a-z2-9]{10}$/
 
+/** decodeURIComponent that answers null instead of throwing on a malformed escape. */
+const decode = (s: string): string | null => {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return null
+  }
+}
+
 const json = (r: Res) =>
   new Response(JSON.stringify(r.body), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
 
@@ -48,14 +57,20 @@ export default {
     switch (route) {
       case 'POST join':
         return json(await t.join(body, now))
-      case 'PUT sessions/:id':
-        return json(await t.heartbeat(key, decodeURIComponent(parts[3] ?? ''), body, now))
+      case 'PUT sessions/:id': {
+        const sid = decode(parts[3] ?? '')
+        if (sid === null) return json({ status: 400, body: { error: 'Bad session id' } })
+        return json(await t.heartbeat(key, sid, body, now))
+      }
       case 'GET ':
         return json(await t.snapshot(key, now))
       case 'POST leave':
         return json(await t.leave(key))
-      case 'DELETE members/:id':
-        return json(await t.remove(key, decodeURIComponent(parts[3] ?? '')))
+      case 'DELETE members/:id': {
+        const id = decode(parts[3] ?? '')
+        if (id === null) return json({ status: 400, body: { error: 'Bad member id' } })
+        return json(await t.remove(key, id))
+      }
       case 'POST code':
         return json(await t.rotate(key))
       default:

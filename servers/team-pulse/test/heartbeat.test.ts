@@ -86,4 +86,54 @@ describe('heartbeats and the snapshot', () => {
     expect(reads.slice(0, 10).every(s => s === 200)).toBe(true)
     expect(reads[10]).toBe(429)
   })
+  it('prunes at most once an hour, so a write 10 minutes after a prune leaves old rows alone', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    const DAY = 86_400_000
+    await api('PUT', `/teams/${teamId}/sessions/old`, { key: admin.key, body: hb({ session: 'old' }), now: T0 })
+    // Prunes here (first write after 7 days); the old session is exactly 7 days old, so it stays.
+    await api('PUT', `/teams/${teamId}/sessions/mid`, { key: linh.key, body: hb({ session: 'mid' }), now: T0 + 7 * DAY })
+    // 5 minutes later the old session is 7 days and 5 minutes old, but the last prune was too recent.
+    await api('PUT', `/teams/${teamId}/sessions/x`, { key: linh.key, body: hb({ session: 'x' }), now: T0 + 7 * DAY + 300_000 })
+    let snap = await api('GET', `/teams/${teamId}`, { key: linh.key, now: T0 + 7 * DAY + 300_000 })
+    expect(snap.body.sessions.map((s: any) => s.id)).toContain('old')
+    // An hour after the last prune, the next write prunes it.
+    await api('PUT', `/teams/${teamId}/sessions/y`, { key: linh.key, body: hb({ session: 'y' }), now: T0 + 7 * DAY + 3_600_000 })
+    snap = await api('GET', `/teams/${teamId}`, { key: linh.key, now: T0 + 7 * DAY + 3_600_000 })
+    expect(snap.body.sessions.map((s: any) => s.id)).not.toContain('old')
+  })
+
+  it('returns sessions seen in the last 12 hours plus each member\'s most recent session of any age', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    // Linh has one session, seen 2 days ago: the panel can still say "seen 2d ago".
+    await api('PUT', `/teams/${teamId}/sessions/linhOnly`, { key: linh.key, body: hb({ session: 'linhOnly' }), now: T0 })
+    // Astro has two old sessions; only the newer one is his latest.
+    await api('PUT', `/teams/${teamId}/sessions/astroOld`, { key: admin.key, body: hb({ session: 'astroOld' }), now: T0 })
+    await api('PUT', `/teams/${teamId}/sessions/astroNew`, { key: admin.key, body: hb({ session: 'astroNew' }), now: T0 + 60_000 })
+    const snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 2 * 86_400_000 })
+    expect(snap.body.sessions.map((s: any) => s.id).sort()).toEqual(['astroNew', 'linhOnly'])
+  })
+
+  it('keeps a recent session even when it is not the latest', async () => {
+    const { teamId, linh } = await newTeam()
+    const now = T0 + 3_600_000
+    await api('PUT', `/teams/${teamId}/sessions/s1`, { key: linh.key, body: hb({ session: 's1' }), now: now - 120_000 })
+    await api('PUT', `/teams/${teamId}/sessions/s2`, { key: linh.key, body: hb({ session: 's2' }), now: now - 60_000 })
+    const snap = await api('GET', `/teams/${teamId}`, { key: linh.key, now })
+    expect(snap.body.sessions.map((s: any) => s.id).sort()).toEqual(['s1', 's2'])
+  })
+
+  it('does not charge a teammate\'s heartbeat rate limit to the session owner', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    const url = `/teams/${teamId}/sessions/sessA`
+    await api('PUT', url, { key: linh.key, body: hb(), now: T0 })
+    for (let i = 1; i <= 3; i++) expect((await api('PUT', url, { key: admin.key, body: hb({ line: 'hijack' }), now: T0 + i * 1_000 })).status).toBe(403)
+    expect((await api('PUT', url, { key: linh.key, body: hb(), now: T0 + 10_000 })).status).toBe(200)
+  })
+
+  it('answers a malformed percent-escape in the path with 400, not a 500', async () => {
+    const { teamId, linh } = await newTeam()
+    const r = await api('PUT', `/teams/${teamId}/sessions/%E0%A4%A`, { key: linh.key, body: hb() })
+    expect(r.status).toBe(400)
+    expect(r.body).toEqual({ error: 'Bad session id' })
+  })
 })
