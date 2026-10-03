@@ -9,7 +9,7 @@ export interface Env {
   ALLOW_TEST_CLOCK?: string
 }
 
-export const MAX_BODY = 2048
+const MAX_BODY = 2048
 const TEAM_ID = /^[a-z2-9]{10}$/
 
 const json = (r: Res) =>
