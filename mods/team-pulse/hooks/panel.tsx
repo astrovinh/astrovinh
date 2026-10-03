@@ -11,7 +11,7 @@ const DOT = { live: '#4cc38a', idle: '#e0a84a', offline: '#5f5e58' } as const
 export function drawPanel(
   ui: any,
   surface: string,
-  v: { rows: Row[]; snapshot: Snapshot | null; problem: string | null; expanded: string[]; fetchedAgoMs: number; joined: boolean }
+  v: { rows: Row[]; snapshot: Snapshot | null; problem: string | null; expanded: string[]; fetchedAgoMs: number; joined: boolean; onExpand: (memberId: string) => void }
 ) {
   const { Box, Text, Svg, Button } = ui
 
@@ -68,7 +68,7 @@ export function drawPanel(
               <Text dimColor>{`5h ${textBar(r.fiveHour, 8)} ${r.fiveHour ?? '\u2013'}%  Week ${textBar(r.week, 8)} ${r.week ?? '\u2013'}%  12h ${st.hours.toFixed(1)}h`}</Text>
             )}
             {r.others.length ? (
-              <Button key={`expand:${r.id}`} plain label={open ? 'Hide other sessions' : `+${r.others.length} more session${r.others.length === 1 ? '' : 's'}`} />
+              <Button key={`expand:${r.id}`} plain onPress={() => v.onExpand(r.id)} label={open ? 'Hide other sessions' : `+${r.others.length} more session${r.others.length === 1 ? '' : 's'}`} />
             ) : null}
             {open ? r.others.map(o => <Text key={`s:${o.id}`} dimColor wrap="truncate">{`${o.line} \u00b7 ${o.where}`}</Text>) : null}
           </Box>
