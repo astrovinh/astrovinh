@@ -29,7 +29,7 @@ export type Snapshot = {
   team: string
   now: number
   you: string
-  members: { id: string; name: string }[]
+  members: { id: string; name: string; status?: string | null; statusAt?: number | null }[]
   sessions: SnapshotSession[]
   segments: SnapshotSegment[]
 }

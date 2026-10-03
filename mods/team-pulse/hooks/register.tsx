@@ -224,6 +224,14 @@ async function runCommand($: any, args: string): Promise<string> {
       await showPresence($)
       return text ? `Your line is now "${text}". /team say with nothing after it goes back to automatic lines.` : 'Back to automatic lines.'
     }
+    case 'status': {
+      if (!m) return 'You are not in a team. Create one with /team create <team> <your name>, or join with /team join <code> <your name>.'
+      const text = rest.join(' ').replace(/^["']|["']$/g, '').trim()
+      const r = await call<{ ok: boolean; status: string | null }>($, m.server, { method: 'PUT', path: `/teams/${m.teamId}/status`, key: m.key, body: { status: text } })
+      if (!r.ok) return r.message
+      await refresh($)
+      return text ? `Your status is set: "${r.data.status ?? text}". /team status alone clears it.` : 'Status cleared.'
+    }
     case 'code': {
       if (!m?.isAdmin) return 'Only the team admin can change the join code.'
       const r = await call<any>($, m.server, { method: 'POST', path: `/teams/${m.teamId}/code`, key: m.key })
@@ -246,7 +254,7 @@ async function runCommand($: any, args: string): Promise<string> {
       await $.store.set('server', rest[0])
       return `Team server set to ${rest[0]} for new teams. Run /team join or /team create to use it.`
     default:
-      return 'Commands: /team, create, join, leave, pause, resume, say, code, remove, server.'
+      return 'Commands: /team, create, join, leave, pause, resume, say, status, code, remove, server.'
   }
 }
 

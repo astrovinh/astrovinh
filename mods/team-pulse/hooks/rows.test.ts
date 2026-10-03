@@ -7,7 +7,7 @@ const s = (o: Partial<SnapshotSession>): SnapshotSession => ({
   id: 's1', member: 'm1', project: 'mobile-app', branch: 'main', line: 'Fixing restore', state: 'working',
   stateSince: NOW - 60_000, fiveHour: 10, week: 20, startedAt: NOW - 3_600_000, seenAt: NOW - 30_000, ...o
 })
-const snap = (sessions: SnapshotSession[], members = [{ id: 'm1', name: 'Linh' }]): Snapshot => ({
+const snap = (sessions: SnapshotSession[], members: Snapshot['members'] = [{ id: 'm1', name: 'Linh' }]): Snapshot => ({
   team: 'Murror', now: NOW, you: 'm1', members, sessions, segments: []
 })
 
@@ -52,7 +52,7 @@ test('main session, others, where line and limits from the latest session', () =
     s({ id: '1', line: 'Older work', seenAt: NOW - 50_000, fiveHour: 5 }),
     s({ id: '2', line: 'Newest work', seenAt: NOW - 10_000, fiveHour: 64, week: 41, startedAt: NOW - 74 * 60_000, branch: 'feat/x' })
   ]), 0)
-  expect(rows[0]!.main).toEqual({ id: '2', line: 'Newest work', where: 'mobile-app · feat/x · 1h 14m' })
+  expect(rows[0]!.main).toEqual({ id: '2', line: 'Newest work', where: 'mobile-app \u00b7 feat/x \u00b7 1h 14m' })
   expect(rows[0]!.others.map(o => o.id)).toEqual(['1'])
   expect([rows[0]!.fiveHour, rows[0]!.week]).toEqual([64, 41])
   expect(rows[0]!.you).toBe(true)
@@ -71,4 +71,30 @@ test('ago and duration read like the mockup', () => {
   expect(ago(2 * 86_400_000)).toBe('2d')
   expect(duration(42 * 60_000)).toBe('42m')
   expect(duration(74 * 60_000)).toBe('1h 14m')
+})
+
+// Row.status already means live/idle/offline, so the away note lives in `note` and `noteAge`.
+const withNotes = (elapsed: number) =>
+  buildRows(
+    snap([], [
+      { id: 'a', name: 'Ann', status: 'sleeping, back 8am', statusAt: NOW - 3 * 3_600_000 },
+      { id: 'b', name: 'Bo' },
+      { id: 'c', name: 'Cy', status: 'lunch', statusAt: null },
+      { id: 'd', name: 'Di', status: null, statusAt: null }
+    ]),
+    elapsed
+  )
+const byName = (rows: ReturnType<typeof buildRows>, f: (r: ReturnType<typeof buildRows>[number]) => unknown) =>
+  Object.fromEntries(rows.map(r => [r.name, f(r)]))
+
+test('a member with an away note and a time gets the note and its age', () => {
+  const rows = withNotes(0)
+  expect(byName(rows, r => r.note)).toEqual({ Ann: 'sleeping, back 8am', Bo: null, Cy: 'lunch', Di: null })
+  expect(byName(rows, r => r.noteAge)).toEqual({ Ann: '3h', Bo: null, Cy: null, Di: null })
+})
+
+test('away note ages use the server clock plus the time since the fetch, not Date.now()', () => {
+  // Date.now() is nowhere near NOW (2027); only the server clock gives 3h, and 2h later it gives 5h.
+  expect(byName(withNotes(0), r => r.noteAge).Ann).toBe('3h')
+  expect(byName(withNotes(2 * 3_600_000), r => r.noteAge).Ann).toBe('5h')
 })

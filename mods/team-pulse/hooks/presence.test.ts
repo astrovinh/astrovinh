@@ -6,7 +6,7 @@ const GREEN = '\u{1F7E2}'
 const YELLOW = '\u{1F7E1}'
 const DOT = '\u00b7'
 const row = (name: string, status: Status = 'live', you = false): Row => ({
-  id: name.toLowerCase(), name, you, status, statusText: '', main: null, others: [], fiveHour: null, week: null
+  id: name.toLowerCase(), name, you, status, statusText: '', note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
 })
 const base = { rows: [] as Row[], paused: false, problem: null as string | null, hasSnapshot: true }
 

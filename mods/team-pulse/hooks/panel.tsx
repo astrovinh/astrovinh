@@ -4,8 +4,11 @@ import type { Snapshot } from '../types'
 import { ROW_SVG_H, ROW_SVG_W, rowSvg, textBar } from './draw'
 import type { Row } from './rows'
 import { ago } from './rows'
+import { cap } from './share'
 import { strip } from './strip'
 
+const BUBBLE = '#34332e'
+const BUBBLE_TEXT = '#ecebe6'
 const DOT = { live: '#4cc38a', idle: '#e0a84a', offline: '#5f5e58' } as const
 
 export function drawPanel(
@@ -51,11 +54,21 @@ export function drawPanel(
         return (
           <Box key={`row:${r.id}`} flexDirection="column" paddingX={2} paddingY={1}>
             <Box justifyContent="space-between">
-              <Text>
-                <Text color={DOT[r.status]}>{'\u25cf '}</Text>
-                <Text bold>{r.name}</Text>
-                {r.you ? <Text dimColor>{' (you)'}</Text> : null}
-              </Text>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text wrap="truncate-end">
+                  <Text color={DOT[r.status]}>{'\u25cf '}</Text>
+                  <Text bold>{r.name}</Text>
+                  {r.you ? <Text dimColor>{' (you)'}</Text> : null}
+                </Text>
+                {r.note ? (
+                  <Text wrap="truncate">
+                    <Text>{' '}</Text>
+                    <Text color={BUBBLE}>{'\u25c2'}</Text>
+                    <Text color={BUBBLE_TEXT} backgroundColor={BUBBLE}>{` ${cap(r.note, 40)} `}</Text>
+                    {r.noteAge ? <Text dimColor backgroundColor={BUBBLE}>{` \u00b7 ${r.noteAge} `}</Text> : null}
+                  </Text>
+                ) : null}
+              </Box>
               <Text dimColor>{r.statusText}</Text>
             </Box>
             {r.main ? <Text wrap="truncate">{r.main.line}</Text> : <Text dimColor>Not running Claude Code</Text>}

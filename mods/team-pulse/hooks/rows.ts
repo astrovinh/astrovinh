@@ -11,6 +11,9 @@ export type Row = {
   you: boolean
   status: Status
   statusText: string
+  /** The away note the person set with /team status, and how old it is. */
+  note: string | null
+  noteAge: string | null
   main: SessionView | null
   others: SessionView[]
   fiveHour: number | null
@@ -49,7 +52,7 @@ export function buildRows(snap: Snapshot, elapsedMs: number): Row[] {
     const view = (s: SnapshotSession): SessionView => ({
       id: s.id,
       line: s.line,
-      where: [s.project, s.branch, duration(now - s.startedAt)].filter(Boolean).join(' · ')
+      where: [s.project, s.branch, duration(now - s.startedAt)].filter(Boolean).join(' \u00b7 ')
     })
     const latest = mine[0]
     const statusText =
@@ -67,6 +70,8 @@ export function buildRows(snap: Snapshot, elapsedMs: number): Row[] {
         you: m.id === snap.you,
         status,
         statusText,
+        note: m.status ?? null,
+        noteAge: m.status && m.statusAt != null ? ago(now - m.statusAt) : null,
         main: active[0] ? view(active[0]) : null,
         others: active.slice(1).map(view),
         fiveHour: latest?.fiveHour ?? null,
