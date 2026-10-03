@@ -20,9 +20,9 @@ test('offline from 150 s without a heartbeat, live before', () => {
 test('rows use the server clock, not the viewer clock', () => {
   // The viewer fetched 20 s ago; a session seen 120 s before the server's now is 140 s old: still live.
   const rows = buildRows(snap([s({ seenAt: NOW - 120_000 })]), 20_000)
-  expect(rows[0].status).toBe('live')
+  expect(rows[0]!.status).toBe('live')
   // 40 s later it is 160 s old: offline.
-  expect(buildRows(snap([s({ seenAt: NOW - 120_000 })]), 40_000)[0].status).toBe('offline')
+  expect(buildRows(snap([s({ seenAt: NOW - 120_000 })]), 40_000)[0]!.status).toBe('offline')
 })
 
 test('live first by session count, then idle, then offline by last seen', () => {
@@ -52,16 +52,16 @@ test('main session, others, where line and limits from the latest session', () =
     s({ id: '1', line: 'Older work', seenAt: NOW - 50_000, fiveHour: 5 }),
     s({ id: '2', line: 'Newest work', seenAt: NOW - 10_000, fiveHour: 64, week: 41, startedAt: NOW - 74 * 60_000, branch: 'feat/x' })
   ]), 0)
-  expect(rows[0].main).toEqual({ id: '2', line: 'Newest work', where: 'mobile-app · feat/x · 1h 14m' })
-  expect(rows[0].others.map(o => o.id)).toEqual(['1'])
-  expect([rows[0].fiveHour, rows[0].week]).toEqual([64, 41])
-  expect(rows[0].you).toBe(true)
+  expect(rows[0]!.main).toEqual({ id: '2', line: 'Newest work', where: 'mobile-app · feat/x · 1h 14m' })
+  expect(rows[0]!.others.map(o => o.id)).toEqual(['1'])
+  expect([rows[0]!.fiveHour, rows[0]!.week]).toEqual([64, 41])
+  expect(rows[0]!.you).toBe(true)
 })
 
 test('an offline person has no main session', () => {
   const rows = buildRows(snap([s({ seenAt: NOW - 3_600_000 })]), 0)
-  expect(rows[0].main).toBe(null)
-  expect(rows[0].others).toEqual([])
+  expect(rows[0]!.main).toBe(null)
+  expect(rows[0]!.others).toEqual([])
 })
 
 test('ago and duration read like the mockup', () => {
