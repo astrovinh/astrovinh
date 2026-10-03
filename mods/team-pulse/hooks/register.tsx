@@ -25,6 +25,8 @@ let lineAt: number | null = null
 let beatFailures = 0
 let nextBeatAt = 0
 let panelOpen = false
+let beatTimer: { cancel: () => void } | null = null
+let readTimer: { cancel: () => void } | null = null
 
 const membership = async ($: any) => ((await $.store.get('membership')) as Membership | undefined) ?? null
 const serverOf = async ($: any) => ((await $.store.get('server')) as string | undefined) ?? DEFAULT_SERVER
@@ -102,6 +104,7 @@ async function refresh($: any) {
 }
 
 async function writeLine($: any) {
+  if (!(await membership($))) return
   if ((await $.store.get('said')) || (await $.store.get('paused')) === true || !lastPrompt) return
   const now = await $.clock.now()
   if (!lineDue(lineAt, now)) return
@@ -208,8 +211,10 @@ export const register: Register = on => {
     cwd = e.cwd
     await $.command.register({ name: COMMAND, description: "See your teammates' Claude Code sessions" })
     void beat($).catch(() => {})
-    $.clock.every(HEARTBEAT_MS, () => void beat($).catch(() => {}))
-    $.clock.every(READ_MS, () => {
+    beatTimer?.cancel()
+    readTimer?.cancel()
+    beatTimer = $.clock.every(HEARTBEAT_MS, () => void beat($).catch(() => {}))
+    readTimer = $.clock.every(READ_MS, () => {
       if (panelOpen) void refresh($).catch(() => {})
     })
     return next(e)
