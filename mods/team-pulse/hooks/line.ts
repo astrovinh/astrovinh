@@ -18,7 +18,7 @@ export function lineRequest(prompt: string) {
 export function cleanLine(text: string): string | null {
   const first = (text.split('\n').find(l => l.trim()) ?? '').trim()
   const bare = first.replace(/^["'\u201c\u201d\u2018\u2019`]+|["'\u201c\u201d\u2018\u2019`]+$/g, '').replace(/[.!?;:,]+$/, '').trim()
-  return bare && bare.toUpperCase() !== 'NONE' ? cap(bare, LIMITS.line) : null
+  return bare && !/^none\b/i.test(bare) ? cap(bare, LIMITS.line) : null
 }
 
 export function fallbackLine(project: string, branch: string): string {

@@ -36,7 +36,12 @@ test('NONE means there was nothing to summarize, so no line', () => {
   expect(cleanLine('none.')).toBe(null)
   expect(cleanLine('"NONE"')).toBe(null)
   expect(cleanLine('Fixing purchase restore on iOS')).toBe('Fixing purchase restore on iOS')
-  expect(cleanLine('None of the tests pass yet')).toBe('None of the tests pass yet')
+  // A reply that starts with the word None is None, whatever follows; a longer word is not.
+  expect(cleanLine('NONE - nothing to summarize')).toBe(null)
+  expect(cleanLine('None (no work described)')).toBe(null)
+  expect(cleanLine('None of the tests pass yet')).toBe(null)
+  expect(cleanLine('Nonetheless fixing the build')).toBe('Nonetheless fixing the build')
+  expect(cleanLine('Fixing the build, none left')).toBe('Fixing the build, none left')
 })
 
 test('the request lets the model say there is nothing to summarize', () => {

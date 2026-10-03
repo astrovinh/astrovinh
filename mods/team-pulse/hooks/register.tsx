@@ -130,9 +130,12 @@ async function writeLine($: any) {
   if ((await $.store.get('said')) || (await $.store.get('paused')) === true || !lastPrompt) return
   const now = await $.clock.now()
   if (!lineDue(lineAt, now)) return
+  const previousAt = lineAt
   lineAt = now
   const r = await $.model.complete(lineRequest(lastPrompt)).catch(() => null)
   const clean = r && r.isAnswered ? cleanLine(r.text) : null
+  // Nothing to summarize (NONE or no answer) must not start the wait before the next try.
+  if (!clean) lineAt = previousAt
   if (clean && clean !== line) {
     line = clean
     await showPresence($)
