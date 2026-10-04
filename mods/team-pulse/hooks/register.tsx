@@ -148,7 +148,13 @@ async function setPinned($: any, value: boolean) {
 
 /** Where the Team pane stands, from the engine's own record rather than anything this module remembers. */
 async function paneState($: any) {
-  return paneStateOf(await $.ui.panes().catch(() => []), PANE)
+  // Older Claude Code has no ui.panes (calling it throws at once, not as a rejected promise): treat that as closed so /team still opens.
+  if (typeof $.ui?.panes !== 'function') return 'closed'
+  try {
+    return paneStateOf(await $.ui.panes(), PANE)
+  } catch {
+    return 'closed'
+  }
 }
 
 /** Closes the panel and un-pins it, for when there is no team to show. */
