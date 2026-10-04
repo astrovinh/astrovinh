@@ -7,7 +7,7 @@ import type { CallResult } from './client'
 import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from './config'
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
 import { drawPanel } from './panel'
-import { openAfter, pinnedAfterClose } from './pin'
+import { paneStateOf, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { basename, buildHeartbeat } from './share'
@@ -26,7 +26,6 @@ let line: string | null = null
 let lineAt: number | null = null
 let beatFailures = 0
 let nextBeatAt = 0
-let panelOpen = false
 let readTick = 0
 let beatTimer: { cancel: () => void } | null = null
 let readTimer: { cancel: () => void } | null = null
@@ -147,19 +146,21 @@ async function setPinned($: any, value: boolean) {
   if (((await $.store.get('panelPinned')) === true) !== value) await $.store.set('panelPinned', value)
 }
 
-/** Closes the panel and forgets it was open, for when there is no team to show. */
+/** Where the Team pane stands, from the engine's own record rather than anything this module remembers. */
+async function paneState($: any) {
+  return paneStateOf(await $.ui.panes().catch(() => []), PANE)
+}
+
+/** Closes the panel and un-pins it, for when there is no team to show. */
 async function dropPanel($: any) {
   await setPinned($, false)
-  if (!panelOpen) return
-  panelOpen = false
   await $.ui.close({ id: PANE }).catch(() => {})
 }
 
 async function openPanel($: any) {
   await setPinned($, true)
-  // The person asked for this open, so it seats at any width; only an explicit "not placed" means it is not open.
-  const r = await $.ui.open({ id: PANE, title: 'Team' })
-  panelOpen = r?.isPlaced !== false
+  // The person asked for this open, so it seats at any width.
+  await $.ui.open({ id: PANE, title: 'Team' })
   await refresh($)
 }
 
@@ -170,8 +171,7 @@ async function runCommand($: any, args: string): Promise<string> {
 
   switch (sub) {
     case '':
-      if (panelOpen) {
-        panelOpen = false
+      if ((await paneState($)) === 'shown') {
         await setPinned($, false)
         await $.ui.close({ id: PANE })
         return 'Team panel closed.'
@@ -271,15 +271,14 @@ export const register: Register = on => {
     readTimer?.cancel()
     beatTimer = $.clock.every(HEARTBEAT_MS, () => void beat($).catch(() => {}))
     // The panel needs fresh reads every tick; the presence line alone is fine with every second one.
-    readTimer = $.clock.every(READ_MS, () => {
+    readTimer = $.clock.every(READ_MS, async () => {
       readTick += 1
-      if (panelOpen || readTick % 2 === 0) void refresh($).catch(() => {})
+      if (readTick % 2 === 0 || (await paneState($)) === 'shown') void refresh($).catch(() => {})
     })
     // Bring the panel back if it was open when the last session ended; the first refresh below draws it.
     if ((await membership($)) && (await $.store.get('panelPinned')) === true) {
-      // An unasked open is held back in a narrow window (split view). Stay pinned, but only count it open once it is placed, so the next /team opens it instead of closing nothing.
-      const r = await $.ui.open({ id: PANE, title: 'Team' }).catch(() => null)
-      panelOpen = openAfter(r)
+      // The engine may hold an unasked open back in a narrow window (split view); the pin stays and the pane seats itself once there is room.
+      void $.ui.open({ id: PANE, title: 'Team' }).catch(() => {})
     }
     void refresh($).catch(() => {})
     return next(e)
@@ -309,7 +308,6 @@ export const register: Register = on => {
 
   on('ui.close', async ($, e, next) => {
     if (e.id === PANE) {
-      panelOpen = false
       const current = (await $.store.get('panelPinned')) === true
       const pinned = pinnedAfterClose(e.origin.kind, current)
       if (pinned !== current) await $.store.set('panelPinned', pinned)

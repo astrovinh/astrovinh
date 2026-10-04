@@ -3,7 +3,9 @@ export function pinnedAfterClose(kind: 'plugin' | 'person' | 'unload', current: 
   return kind === 'person' ? false : current
 }
 
-/** Whether the panel is really on screen after an open. The engine holds back an unasked pane in a narrow window (split view), and a rejected call leaves nothing open. */
-export function openAfter(result: { isPlaced: boolean; reason?: string } | null | undefined): boolean {
-  return result?.isPlaced === true
+/** Where the Team pane stands in the engine's own record: on screen, held back (narrow window, split view), or not open at all. */
+export function paneStateOf(panes: readonly { id: string; isPlaced: boolean }[], id: string): 'shown' | 'waiting' | 'closed' {
+  const pane = panes.find(p => p.id === id)
+  if (!pane) return 'closed'
+  return pane.isPlaced ? 'shown' : 'waiting'
 }

@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { openAfter, pinnedAfterClose } from './pin'
+import { paneStateOf, pinnedAfterClose } from './pin'
 
 test('the person closing the panel un-pins it', () => {
   expect(pinnedAfterClose('person', true)).toBe(false)
@@ -16,15 +16,15 @@ test('a close the plugin made itself keeps the pin as it was', () => {
   expect(pinnedAfterClose('plugin', false)).toBe(false)
 })
 
-test('an open the engine placed counts as open', () => {
-  expect(openAfter({ isPlaced: true })).toBe(true)
+test('no pane with that id means closed', () => {
+  expect(paneStateOf([], 'team')).toBe('closed')
+  expect(paneStateOf([{ id: 'other', isPlaced: true }], 'team')).toBe('closed')
 })
 
-test('an open the engine held back (split view, narrow window) does not count as open', () => {
-  expect(openAfter({ isPlaced: false, reason: 'narrow' })).toBe(false)
+test('a placed pane is shown', () => {
+  expect(paneStateOf([{ id: 'other', isPlaced: false }, { id: 'team', isPlaced: true }], 'team')).toBe('shown')
 })
 
-test('a rejected or missing open result does not count as open', () => {
-  expect(openAfter(undefined)).toBe(false)
-  expect(openAfter(null)).toBe(false)
+test('a pane the engine is holding back (split view, narrow window) is waiting, not shown', () => {
+  expect(paneStateOf([{ id: 'team', isPlaced: false }], 'team')).toBe('waiting')
 })
