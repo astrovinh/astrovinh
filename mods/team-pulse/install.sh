@@ -2,9 +2,8 @@
 # Installs the Murror team mod for Claude Code (Mac/Linux).
 set -euo pipefail
 
-for cmd in git python3; do
-  command -v "$cmd" >/dev/null 2>&1 || { echo "This installer needs $cmd. Install it (on a Mac: xcode-select --install), then run this again." >&2; exit 1; }
-done
+git --version >/dev/null 2>&1 || { echo "This installer needs git. Install it (on a Mac: xcode-select --install), then run this again." >&2; exit 1; }
+python3 --version >/dev/null 2>&1 || { echo "This installer needs python3. Install it (on a Mac: xcode-select --install), then run this again." >&2; exit 1; }
 
 # Everything lives in main so a truncated download (curl | bash) runs nothing.
 main() {
@@ -63,7 +62,7 @@ PY
 
   echo "Done. The Murror team mod is installed."
   echo "Next:"
-  echo "  1. Open a NEW Claude Code session (sessions that are already open keep running without it)."
+  echo "  1. Open a NEW Claude Code session (if the team line does not appear, quit Claude Code and open it again)."
   echo "  2. Type: /team join <code> <your name>   (ask Astro for the code)"
   echo "Guide: $MOD/GUIDE.md"
 }
