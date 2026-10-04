@@ -148,8 +148,8 @@ async function setPinned($: any, value: boolean) {
 
 /** Where the Team pane stands, from the engine's own record rather than anything this module remembers. */
 async function paneState($: any) {
-  // Older Claude Code has no ui.panes (calling it throws at once, not as a rejected promise): treat that as closed so /team still opens.
-  if (typeof $.ui?.panes !== 'function') return 'closed'
+  // Older Claude Code has no ui.panes, so calling it throws at once (not as a rejected promise): that lands in the catch as closed, and /team still opens.
+  // No typeof probe on $.ui.panes: the validator only allows $.noun.event(...) calls.
   try {
     return paneStateOf(await $.ui.panes(), PANE)
   } catch {
