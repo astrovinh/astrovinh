@@ -39,9 +39,9 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 
 This is sent every 60 seconds while a session is open. Your own row in `/team` shows exactly what is shared about you.
 
-This covers every Claude Code session on this Mac, in any folder, including personal ones. Type `/team pause` before private work.
+Sharing covers every Claude Code session on this Mac, in any folder, including personal ones. Type `/team pause` before private work.
 
-The person who runs the team server (Astro) can also read everything it stores.
+The person who runs the team server (Astro) can read everything it stores.
 
 Never shared: your prompts, Claude's replies, your code, file paths beyond the folder name, or cost.
 
