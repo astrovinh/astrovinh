@@ -56,4 +56,12 @@ describe('text()', () => {
     // ASCII chars: 'abcd' with max=2 should give 'ab'
     expect(text('abcd', 2)).toBe('ab')
   })
+
+  it('does not split emoji at the cut point: ab + emoji with max 3 returns all three code points', () => {
+    expect(text('ab' + '\u{1F634}', 3)).toBe('ab' + '\u{1F634}')
+  })
+
+  it('cuts emoji by whole characters: 5 emoji with max 2 returns 2 whole emoji', () => {
+    expect(text('\u{1F634}'.repeat(5), 2)).toBe('\u{1F634}' + '\u{1F634}')
+  })
 })
