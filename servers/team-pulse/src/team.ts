@@ -20,6 +20,7 @@ export class Team extends DurableObject {
       CREATE INDEX IF NOT EXISTS segments_session_end ON segments (session, end_at);
       CREATE INDEX IF NOT EXISTS segments_end ON segments (end_at);
       CREATE INDEX IF NOT EXISTS sessions_seen ON sessions (seen_at);
+      CREATE INDEX IF NOT EXISTS sessions_member_seen ON sessions (member, seen_at);
     `)
     // Teams created before the away status existed already have a members table without these columns.
     const cols = this.sql.exec('PRAGMA table_info(members)').toArray().map(r => String(r.name))
@@ -79,7 +80,7 @@ export class Team extends DurableObject {
 
   async join(body: any, now: number): Promise<Res> {
     const code = this.meta('code')
-    if (!code) return fail(404, 'No team has that code')
+    if (!code) return fail(404, 'No team has that code. Check the code with the person who sent it.')
     if (this.limited('join', 10, now)) return fail(429, 'Too many join attempts. Wait a minute and try again.')
     if (!safeEqual(String(body?.code ?? ''), code)) return fail(403, 'That join code is not valid. Ask the team admin for the current one.')
     const name = text(body?.name, CAPS.name)
@@ -149,7 +150,9 @@ export class Team extends DurableObject {
     const sessions = this.sql
       .exec(
         `SELECT * FROM sessions WHERE seen_at >= ?
-           OR id IN (SELECT (SELECT s.id FROM sessions s WHERE s.member = m.id ORDER BY s.seen_at DESC, s.rowid DESC LIMIT 1) FROM members m)
+         UNION
+         SELECT s.* FROM members m JOIN sessions s
+           ON s.id = (SELECT id FROM sessions x WHERE x.member = m.id ORDER BY x.seen_at DESC, x.rowid DESC LIMIT 1)
          ORDER BY seen_at DESC`,
         now - Team.WINDOW_MS
       )

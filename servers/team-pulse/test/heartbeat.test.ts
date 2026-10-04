@@ -113,6 +113,24 @@ describe('heartbeats and the snapshot', () => {
     expect(snap.body.sessions.map((s: any) => s.id).sort()).toEqual(['astroNew', 'linhOnly'])
   })
 
+  it('returns only the latest session for a member whose sessions are all older than 12 hours', async () => {
+    const { teamId, linh } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/older`, { key: linh.key, body: hb({ session: 'older' }), now: T0 })
+    await api('PUT', `/teams/${teamId}/sessions/newer`, { key: linh.key, body: hb({ session: 'newer' }), now: T0 + 60_000 })
+    const snap = await api('GET', `/teams/${teamId}`, { key: linh.key, now: T0 + 2 * 86_400_000 })
+    expect(snap.body.sessions.map((s: any) => s.id)).toEqual(['newer'])
+  })
+
+  it('returns sessions newest first', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    const now = T0 + 3_600_000
+    await api('PUT', `/teams/${teamId}/sessions/a`, { key: linh.key, body: hb({ session: 'a' }), now: now - 300_000 })
+    await api('PUT', `/teams/${teamId}/sessions/b`, { key: admin.key, body: hb({ session: 'b' }), now: now - 100_000 })
+    await api('PUT', `/teams/${teamId}/sessions/c`, { key: linh.key, body: hb({ session: 'c' }), now: now - 200_000 })
+    const snap = await api('GET', `/teams/${teamId}`, { key: linh.key, now })
+    expect(snap.body.sessions.map((s: any) => s.id)).toEqual(['b', 'c', 'a'])
+  })
+
   it('keeps a recent session even when it is not the latest', async () => {
     const { teamId, linh } = await newTeam()
     const now = T0 + 3_600_000

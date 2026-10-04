@@ -31,6 +31,7 @@ describe('create and join', () => {
   it('refuses a team that does not exist', async () => {
     const r = await api('POST', '/teams/aaaaaaaaaa/join', { body: { code: 'x', name: 'Bao' } })
     expect(r.status).toBe(404)
+    expect(r.body.error).toBe('No team has that code. Check the code with the person who sent it.')
   })
 
   it('refuses a body over 2 KB and a body that is not JSON', async () => {
