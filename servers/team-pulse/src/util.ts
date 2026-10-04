@@ -22,9 +22,11 @@ export function safeEqual(a: string, b: string): boolean {
   return diff === 0
 }
 
-/** A trimmed string cut to `max`, or '' for anything that is not a string. */
+/** A trimmed single-line string without control characters, cut to `max` whole characters, or '' for anything that is not a string. */
 export function text(v: unknown, max: number): string {
-  return typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : ''
+  if (typeof v !== 'string') return ''
+  const clean = v.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim()
+  return Array.from(clean).slice(0, max).join('').trim()
 }
 
 /** The form a name is compared in: composed Unicode, lower case. */
