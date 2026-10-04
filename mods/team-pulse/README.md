@@ -1,5 +1,7 @@
 # murror (team presence mod)
 
+New here? Read GUIDE.md.
+
 A side panel showing which teammates are running Claude Code, what each session is working on, and their 5-hour and weekly limits. Open it with `/team`.
 
 ## What you share
@@ -21,7 +23,7 @@ The team server keeps activity for 7 days. `/team leave` deletes everything abou
 
 ## Install
 
-Clone the repo, then add `mods/team-pulse` to Claude Code's plugin folders (the same way `mods/usage-bars/install.sh` does) and reopen the app.
+Run the one-line installer in GUIDE.md, or add `mods/team-pulse` to Claude Code's plugin folders yourself, then open a new session.
 
 ## Commands
 
