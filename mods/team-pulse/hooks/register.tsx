@@ -7,7 +7,7 @@ import type { CallResult } from './client'
 import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from './config'
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
 import { drawPanel } from './panel'
-import { pinnedAfterClose } from './pin'
+import { openAfter, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { basename, buildHeartbeat } from './share'
@@ -156,9 +156,10 @@ async function dropPanel($: any) {
 }
 
 async function openPanel($: any) {
-  panelOpen = true
   await setPinned($, true)
-  await $.ui.open({ id: PANE, title: 'Team' })
+  // The person asked for this open, so it seats at any width; only an explicit "not placed" means it is not open.
+  const r = await $.ui.open({ id: PANE, title: 'Team' })
+  panelOpen = r?.isPlaced !== false
   await refresh($)
 }
 
@@ -276,8 +277,9 @@ export const register: Register = on => {
     })
     // Bring the panel back if it was open when the last session ended; the first refresh below draws it.
     if ((await membership($)) && (await $.store.get('panelPinned')) === true) {
-      panelOpen = true
-      void $.ui.open({ id: PANE, title: 'Team' }).catch(() => {})
+      // An unasked open is held back in a narrow window (split view). Stay pinned, but only count it open once it is placed, so the next /team opens it instead of closing nothing.
+      const r = await $.ui.open({ id: PANE, title: 'Team' }).catch(() => null)
+      panelOpen = openAfter(r)
     }
     void refresh($).catch(() => {})
     return next(e)

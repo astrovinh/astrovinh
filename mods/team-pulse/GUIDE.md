@@ -58,6 +58,9 @@ Send a normal request. Slash commands do not count. A greeting gives no summary.
 **It says it can't reach the team server.**
 Try again in a few minutes. Check your internet. Tell Astro if it lasts.
 
+**The panel disappeared when I used split view.**
+Split view makes each half narrow, and the panel only reopens by itself when there is room. Type `/team` in the half where you want it.
+
 **I want to stop sharing.**
 Type `/team pause`. To leave the team and delete your data, type `/team leave`.
 
