@@ -1,5 +1,5 @@
 // Where the team server lives and how often everything runs. Task 12 sets the deployed URL.
-export const DEFAULT_SERVER = 'http://127.0.0.1:8787'
+export const DEFAULT_SERVER = 'https://team-pulse.astrovinh.workers.dev'
 
 export const HEARTBEAT_MS = 60_000
 export const READ_MS = 30_000
