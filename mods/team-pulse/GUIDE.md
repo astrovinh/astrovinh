@@ -30,13 +30,16 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 
 - Your name.
 - Whether you are working or idle.
-- Your project folder and git branch.
+- Your project folder and git branch, for each open session.
 - A short AI summary of your latest request. It is made through your own Claude login. Your actual prompt is never shared.
 - Your 5-hour and weekly limit percent.
+- How many Claude Code sessions you have open, and how long each has been open.
 - When you were active in the last 12 hours.
 - Your away note, if you set one.
 
-Never shared: your prompts, Claude's replies, your code, file paths or cost.
+This is sent every 60 seconds while a session is open. The person who runs the team server (Astro) can also read everything it stores.
+
+Never shared: your prompts, Claude's replies, your code, file paths beyond the folder name, or cost.
 
 Kept for 7 days. `/team leave` deletes everything about you.
 

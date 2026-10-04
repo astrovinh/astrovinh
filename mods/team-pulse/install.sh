@@ -2,29 +2,49 @@
 # Installs the Murror team mod for Claude Code (Mac/Linux).
 set -euo pipefail
 
-REPO="https://github.com/astrovinh/astrovinh"
-BRANCH="claude/usage-bars-mod"
-DEST="${MURROR_TEAM_DEST:-$HOME/astrovinh}"
-MOD="$DEST/mods/team-pulse"
-SETTINGS="$HOME/.claude/settings.json"
+for cmd in git python3; do
+  command -v "$cmd" >/dev/null 2>&1 || { echo "This installer needs $cmd. Install it (on a Mac: xcode-select --install), then run this again." >&2; exit 1; }
+done
 
-if [ -d "$DEST/.git" ]; then
-  git -C "$DEST" fetch origin "$BRANCH"
-  git -C "$DEST" checkout "$BRANCH"
-  git -C "$DEST" pull --ff-only origin "$BRANCH"
-elif [ -e "$DEST" ]; then
-  echo "$DEST already exists and is not the astrovinh repo. Move it aside or set MURROR_TEAM_DEST=/another/path, then run this again."
-  exit 1
-else
-  git clone --branch "$BRANCH" "$REPO" "$DEST"
-fi
+# Everything lives in main so a truncated download (curl | bash) runs nothing.
+main() {
+  local REPO="https://github.com/astrovinh/astrovinh"
+  local BRANCH="claude/usage-bars-mod"
+  local DEST="${MURROR_TEAM_DEST:-$HOME/astrovinh}"
+  case "$DEST" in /*) ;; *) DEST="$PWD/$DEST" ;; esac
+  local MOD="$DEST/mods/team-pulse"
+  local SETTINGS="$HOME/.claude/settings.json"
 
-mkdir -p "$HOME/.claude"
-if [ -f "$SETTINGS" ]; then
-  cp "$SETTINGS" "$SETTINGS.before-murror-team-$(date +%Y%m%d-%H%M%S)"
-fi
+  if [ -d "$DEST/.git" ]; then
+    git -C "$DEST" fetch origin "$BRANCH"
+    git -C "$DEST" checkout "$BRANCH"
+    git -C "$DEST" pull --ff-only origin "$BRANCH"
+  elif [ -e "$DEST" ]; then
+    echo "$DEST already exists and is not the astrovinh repo. Move it aside or set MURROR_TEAM_DEST=/another/path, then run this again."
+    exit 1
+  else
+    git clone --branch "$BRANCH" "$REPO" "$DEST"
+  fi
 
-python3 - "$SETTINGS" "$MOD" <<'PY'
+  mkdir -p "$HOME/.claude"
+
+  # Back up only when the setting is about to change.
+  if [ -f "$SETTINGS" ] && ! python3 - "$SETTINGS" "$MOD" <<'PY'
+import json, os, sys
+path, mod = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as f:
+        data = json.load(f)
+    dirs = data.get("env", {}).get("CLAUDE_CODE_PLUGIN_DIRS", "").split(os.pathsep)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if mod in dirs else 1)
+PY
+  then
+    cp "$SETTINGS" "$SETTINGS.before-murror-team-$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  python3 - "$SETTINGS" "$MOD" <<'PY'
 import json, os, sys
 path, mod = sys.argv[1], sys.argv[2]
 data = {}
@@ -41,8 +61,11 @@ with open(path, "w") as f:
     f.write("\n")
 PY
 
-echo "Done. The Murror team mod is installed."
-echo "Next:"
-echo "  1. Open a NEW Claude Code session (sessions that are already open keep running without it)."
-echo "  2. Type: /team join <code> <your name>   (ask Astro for the code)"
-echo "Guide: $MOD/GUIDE.md"
+  echo "Done. The Murror team mod is installed."
+  echo "Next:"
+  echo "  1. Open a NEW Claude Code session (sessions that are already open keep running without it)."
+  echo "  2. Type: /team join <code> <your name>   (ask Astro for the code)"
+  echo "Guide: $MOD/GUIDE.md"
+}
+
+main "$@"
