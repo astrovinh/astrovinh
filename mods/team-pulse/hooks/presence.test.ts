@@ -58,7 +58,7 @@ test('paused adds a suffix to the list and to the nobody line', () => {
 
 test('a failed refresh wins over everything and has no paused suffix', () => {
   expect(presenceLine({ ...base, rows: [row('Tuan')], problem: 'Network is down', paused: true })).toBe(
-    `Online members ${DOT} can't reach the team server`
+    `Online members ${DOT} can't reach the team server, will retry`
   )
 })
 

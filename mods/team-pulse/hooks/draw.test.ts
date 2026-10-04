@@ -79,3 +79,8 @@ test('noteWidth sizes characters by kind', () => {
   expect(Math.round(noteWidth('\u{1F634}') * 1000)).toBe(Math.round(14 * 1.05 * 1000))
   expect(Math.round(noteWidth('.') * 1000)).toBe(Math.round(4.6 * 1.05 * 1000))
 })
+
+test('noteWidth counts accented letters wider than plain ones', () => {
+  expect(noteWidth('\u0110\u1ee9c \u0111i \u0111\u00f3n con')).toBeGreaterThan(noteWidth('Duc di don con'))
+  expect(Math.round(noteWidth('\u00e9') * 1000)).toBe(Math.round(6.4 * 1.05 * 1000))
+})

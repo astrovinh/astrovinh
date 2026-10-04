@@ -16,7 +16,7 @@ export function presenceLine(v: {
   problem: string | null
   hasSnapshot: boolean
 }): string | undefined {
-  if (v.problem) return `${LABEL} ${DOT} can't reach the team server`
+  if (v.problem) return `${LABEL} ${DOT} can't reach the team server, will retry`
   if (!v.hasSnapshot) return undefined
   const paused = v.paused ? ` ${DOT} sharing paused` : ''
   const online = v.rows.filter(r => !r.you && (r.status === 'live' || r.status === 'idle'))

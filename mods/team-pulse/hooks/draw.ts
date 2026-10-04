@@ -74,7 +74,7 @@ export function noteWidth(s: string): number {
   let w = 0
   for (const ch of s) {
     const c = ch.codePointAt(0)!
-    w += c > 0x2000 ? 14 : ch === ' ' ? 3.1 : ch >= '0' && ch <= '9' ? 6.6 : ch >= 'A' && ch <= 'Z' ? 7.5 : ch >= 'a' && ch <= 'z' ? 5.9 : 4.6
+    w += c > 0x2000 ? 14 : c >= 0xc0 ? 6.4 : ch === ' ' ? 3.1 : ch >= '0' && ch <= '9' ? 6.6 : ch >= 'A' && ch <= 'Z' ? 7.5 : ch >= 'a' && ch <= 'z' ? 5.9 : 4.6
   }
   return w * 1.05
 }
