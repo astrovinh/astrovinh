@@ -197,7 +197,7 @@ async function runCommand($: any, args: string): Promise<string> {
       nextBeatAt = 0
       await beat($).catch(() => {})
       await openPanel($)
-      return `Created ${r.data.team}. Teammates join with: /team join ${r.data.joinCode} <their name>`
+      return `Created ${r.data.team}. Teammates join with: /team join ${r.data.joinCode} followed by their name`
     }
     case 'join': {
       const [code = '', ...words] = rest
