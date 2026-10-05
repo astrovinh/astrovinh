@@ -11,6 +11,8 @@ const INK = '#8b8b8b'
 const TRACK = 'rgba(139,139,139,0.22)'
 const STRIP = 'rgba(122,162,247,0.55)'
 const STRIP_NOW = '#7aa2f7'
+const IDLE = 'rgba(224,175,104,0.45)'
+const IDLE_NOW = '#e0af68'
 
 export function esc(s: string): string {
   return s.replace(/[&<>"]/g, c => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'))
@@ -40,7 +42,7 @@ function stripTrack(pieces: Piece[]): string {
   return (
     `<rect y="-1" width="${w}" height="6" rx="3" fill="${TRACK}"/>` +
     pieces
-      .map(pc => `<rect x="${(pc.from * w).toFixed(1)}" y="-1" width="${Math.max(1.5, (pc.to - pc.from) * w).toFixed(1)}" height="6" rx="3" fill="${pc.running ? STRIP_NOW : STRIP}"/>`)
+      .map(pc => `<rect x="${(pc.from * w).toFixed(1)}" y="-1" width="${Math.max(1.5, (pc.to - pc.from) * w).toFixed(1)}" height="6" rx="3" fill="${pc.active ? (pc.running ? STRIP_NOW : STRIP) : pc.running ? IDLE_NOW : IDLE}"/>`)
       .join('')
   )
 }

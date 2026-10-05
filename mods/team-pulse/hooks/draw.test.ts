@@ -6,7 +6,7 @@ test('severity matches usage-bars: green, amber from 60, red from 85', () => {
 })
 
 test('a row draws two bars and a strip at a fixed width', () => {
-  const { source, alt } = rowSvg({ fiveHour: 64, week: 41, pieces: [{ from: 0.5, to: 0.75, running: true }], hours: 3, name: 'Linh' })
+  const { source, alt } = rowSvg({ fiveHour: 64, week: 41, pieces: [{ from: 0.5, to: 0.75, running: true, active: true }], hours: 3, name: 'Linh' })
   expect(source.includes(`width="${ROW_SVG_W}"`)).toBe(true)
   expect(source.includes('>64%<') && source.includes('>41%<') && source.includes('>3.0h<')).toBe(true)
   expect(alt).toBe('Linh: 5-hour 64%, week 41%, 3.0 hours in the last 12 hours')
@@ -83,4 +83,14 @@ test('noteWidth sizes characters by kind', () => {
 test('noteWidth counts accented letters wider than plain ones', () => {
   expect(noteWidth('\u0110\u1ee9c \u0111i \u0111\u00f3n con')).toBeGreaterThan(noteWidth('Duc di don con'))
   expect(Math.round(noteWidth('\u00e9') * 1000)).toBe(Math.round(6.4 * 1.05 * 1000))
+})
+
+test('the strip draws active pieces blue and idle pieces yellow, brighter while running', () => {
+  const draw = (pieces: { from: number; to: number; running: boolean; active: boolean }[]) => rowSvg({ fiveHour: null, week: null, pieces, hours: 0, name: 'Linh' }).source
+  expect(draw([{ from: 0.1, to: 0.2, running: false, active: true }]).includes('fill="rgba(122,162,247,0.55)"')).toBe(true)
+  expect(draw([{ from: 0.1, to: 0.2, running: true, active: true }]).includes('fill="#7aa2f7"')).toBe(true)
+  const idle = draw([{ from: 0.1, to: 0.2, running: false, active: false }])
+  expect(idle.includes('fill="rgba(224,175,104,0.45)"')).toBe(true)
+  expect(idle.includes('rgba(122,162,247,0.55)')).toBe(false)
+  expect(draw([{ from: 0.1, to: 0.2, running: true, active: false }]).includes('fill="#e0af68"')).toBe(true)
 })

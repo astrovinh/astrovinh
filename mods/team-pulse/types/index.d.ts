@@ -23,7 +23,8 @@ export type SnapshotSession = {
   seenAt: number
 }
 
-export type SnapshotSegment = { session: string; member: string; start: number; end: number }
+// state is missing on an older server, which counted every segment as active.
+export type SnapshotSegment = { session: string; member: string; start: number; end: number; state?: 'working' | 'idle' }
 
 export type Snapshot = {
   team: string
