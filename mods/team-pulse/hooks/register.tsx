@@ -6,6 +6,7 @@ import { backoffMs, parseJoinCode, requestOf, resultOf, UNREACHABLE } from './cl
 import type { CallResult } from './client'
 import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from './config'
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
+import { cleanName } from './names'
 import { drawPanel } from './panel'
 import { paneStateOf, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
@@ -170,6 +171,8 @@ async function openPanel($: any) {
   await refresh($)
 }
 
+const NOT_IN_TEAM = 'You are not in a team. Create one with /team create <team> <your name>, or join with /team join <code> <your name>.'
+
 async function runCommand($: any, args: string): Promise<string> {
   const [sub = '', ...rest] = args.trim().split(/\s+/)
   const m = await membership($)
@@ -185,23 +188,25 @@ async function runCommand($: any, args: string): Promise<string> {
       await openPanel($)
       return 'Team panel opened.'
     case 'create': {
-      const [team, ...name] = rest
-      if (!team || !name.length) return 'Use /team create <team> <your name>, for example /team create Murror Astro.'
-      const r = await call<any>($, srv, { method: 'POST', path: '/teams', body: { team, name: name.join(' ') } })
+      const [team, ...words] = rest
+      const name = cleanName(words.join(' '))
+      if (!team || !name) return 'Use /team create <team> <your name>, for example /team create Murror Astro.'
+      const r = await call<any>($, srv, { method: 'POST', path: '/teams', body: { team, name } })
       if (!r.ok) return r.message
-      await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: name.join(' '), isAdmin: true, joinCode: r.data.joinCode })
+      await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name, isAdmin: true, joinCode: r.data.joinCode })
       nextBeatAt = 0
       await beat($).catch(() => {})
       await openPanel($)
       return `Created ${r.data.team}. Teammates join with: /team join ${r.data.joinCode} <their name>`
     }
     case 'join': {
-      const [code = '', ...name] = rest
+      const [code = '', ...words] = rest
+      const name = cleanName(words.join(' '))
       const parsed = parseJoinCode(code)
-      if (!parsed || !name.length) return 'Use /team join <code> <your name>. Ask the team admin for the code.'
-      const r = await call<any>($, srv, { method: 'POST', path: `/teams/${parsed.teamId}/join`, body: { code: parsed.secret, name: name.join(' ') } })
+      if (!parsed || !name) return 'Use /team join <code> <your name>. Ask the team admin for the code.'
+      const r = await call<any>($, srv, { method: 'POST', path: `/teams/${parsed.teamId}/join`, body: { code: parsed.secret, name } })
       if (!r.ok) return r.message
-      await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: name.join(' '), isAdmin: false })
+      await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name, isAdmin: false })
       nextBeatAt = 0
       await beat($).catch(() => {})
       await openPanel($)
@@ -235,12 +240,23 @@ async function runCommand($: any, args: string): Promise<string> {
       return text ? `Your line is now "${text}". /team say with nothing after it goes back to automatic lines.` : 'Back to automatic lines.'
     }
     case 'status': {
-      if (!m) return 'You are not in a team. Create one with /team create <team> <your name>, or join with /team join <code> <your name>.'
+      if (!m) return NOT_IN_TEAM
       const text = rest.join(' ').replace(/^["']|["']$/g, '').trim()
       const r = await call<{ ok: boolean; status: string | null }>($, m.server, { method: 'PUT', path: `/teams/${m.teamId}/status`, key: m.key, body: { status: text } })
       if (!r.ok) return r.message
       await refresh($)
       return text ? `Your status is set: "${r.data.status ?? text}". /team status alone clears it.` : 'Status cleared.'
+    }
+    case 'name': {
+      if (!m) return NOT_IN_TEAM
+      const name = cleanName(rest.join(' '))
+      if (!name) return 'Use /team name <your new name>, for example /team name Linh.'
+      const r = await call<{ ok: boolean; name: string }>($, m.server, { method: 'PUT', path: `/teams/${m.teamId}/name`, key: m.key, body: { name } })
+      if (!r.ok) return r.message
+      const stored = r.data.name ?? name
+      await $.store.set('membership', { ...m, name: stored })
+      await refresh($)
+      return `You are now ${stored} on the team.`
     }
     case 'code': {
       if (!m?.isAdmin) return 'Only the team admin can change the join code.'
@@ -264,7 +280,7 @@ async function runCommand($: any, args: string): Promise<string> {
       await $.store.set('server', rest[0])
       return `Team server set to ${rest[0]} for new teams. Run /team join or /team create to use it.`
     default:
-      return 'Commands: /team, create, join, leave, pause, resume, say, status, code, remove, server.'
+      return 'Commands: /team, create, join, leave, pause, resume, say, status, name, code, remove, server.'
   }
 }
 
