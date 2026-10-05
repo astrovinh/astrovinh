@@ -7,6 +7,8 @@ export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, 
 export class Team extends DurableObject {
   sql: SqlStorage
   hits = new Map<string, number[]>()
+  /** The team view every poll shares; see snapshot(). Changes a member makes clear it, so they show on the next poll. */
+  view: { at: number; body: Record<string, unknown> } | null = null
 
   constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env as never)
@@ -51,6 +53,7 @@ export class Team extends DurableObject {
       if (/UNIQUE constraint failed: members\.name_key/i.test(String(e))) return null
       throw e
     }
+    this.view = null
     return { id, key }
   }
 
@@ -97,6 +100,7 @@ export class Team extends DurableObject {
   static readonly KEEP_MS = 7 * 86_400_000
   static readonly PRUNE_EVERY_MS = 3_600_000
   static readonly WINDOW_MS = 12 * 3_600_000
+  static readonly VIEW_MS = 30_000
 
   protected async me(key: string): Promise<{ id: string; name: string; isAdmin: boolean } | null> {
     if (!key) return null
@@ -135,6 +139,8 @@ export class Team extends DurableObject {
       sid, me.id, text(body?.project, CAPS.project), text(body?.branch, CAPS.branch), text(body?.line, CAPS.line),
       state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now
     )
+    // A new session shows on the next poll; an existing one waits for the shared view to rebuild, or every heartbeat would rebuild it.
+    if (!existing) this.view = null
 
     // One continuous run per state: a state change inside the window closes the old run at its end and opens the next from there.
     const last = this.sql.exec('SELECT rowid AS rid, end_at, state FROM segments WHERE session = ? ORDER BY end_at DESC LIMIT 1', sid).toArray()[0]
@@ -152,7 +158,15 @@ export class Team extends DurableObject {
     const me = await this.me(key)
     if (!me) return fail(401, 'Not a member of this team')
     if (this.limited(`rd:${me.id}`, 10, now)) return fail(429, 'Too many reads')
-    const members = this.sql.exec('SELECT id, name, status, status_at FROM members ORDER BY joined_at, rowid').toArray()
+    // Every open session polls, so reading the tables per poll costs sessions x team size in rows a day; one read per VIEW_MS serves them all.
+    const v = this.view
+    const fresh = v !== null && now >= v.at && now - v.at < Team.VIEW_MS
+    if (!fresh) this.view = { at: now, body: this.readView(now) }
+    return ok({ ...this.view!.body, you: me.id })
+  }
+
+  protected readView(now: number): Record<string, unknown> {
+    const members =this.sql.exec('SELECT id, name, status, status_at FROM members ORDER BY joined_at, rowid').toArray()
     // Sessions seen in the last 12 hours, plus each member's most recent one of any age ("seen 2d ago").
     const sessions = this.sql
       .exec(
@@ -165,10 +179,9 @@ export class Team extends DurableObject {
       )
       .toArray()
     const segments = this.sql.exec('SELECT session, member, start_at, end_at, state FROM segments WHERE end_at >= ? ORDER BY start_at', now - Team.WINDOW_MS).toArray()
-    return ok({
+    return {
       team: this.meta('team'),
       now,
-      you: me.id,
       members: members.map(m => ({
         id: String(m.id), name: String(m.name),
         status: String(m.status) || null, statusAt: String(m.status) ? Number(m.status_at) : null
@@ -179,7 +192,7 @@ export class Team extends DurableObject {
         week: s.week === null ? null : Number(s.week), startedAt: Number(s.started_at), seenAt: Number(s.seen_at)
       })),
       segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at), state: String(s.state) }))
-    })
+    }
   }
 
   /** Sets or clears the caller's own away status. An empty result clears it. */
@@ -190,6 +203,7 @@ export class Team extends DurableObject {
     const status = text(body?.status, CAPS.status)
     if (status) this.sql.exec('UPDATE members SET status = ?, status_at = ? WHERE id = ?', status, now, me.id)
     else this.sql.exec("UPDATE members SET status = '', status_at = 0 WHERE id = ?", me.id)
+    this.view = null
     return ok({ ok: true, status: status || null })
   }
 
@@ -210,6 +224,7 @@ export class Team extends DurableObject {
       if (/UNIQUE constraint failed: members\.name_key/i.test(String(e))) return taken()
       throw e
     }
+    this.view = null
     return ok({ ok: true, name })
   }
 
@@ -217,6 +232,7 @@ export class Team extends DurableObject {
     this.sql.exec('DELETE FROM segments WHERE member = ?', id)
     this.sql.exec('DELETE FROM sessions WHERE member = ?', id)
     this.sql.exec('DELETE FROM members WHERE id = ?', id)
+    this.view = null
     const hasAdmin = this.sql.exec('SELECT 1 FROM members WHERE is_admin = 1').toArray().length > 0
     const hasMembers = this.sql.exec('SELECT 1 FROM members').toArray().length > 0
     if (!hasAdmin && hasMembers) {
