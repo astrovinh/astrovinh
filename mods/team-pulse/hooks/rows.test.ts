@@ -1,5 +1,6 @@
 import { test, expect } from 'claude-code/testing'
-import { ago, buildRows, duration, sessionStatus } from './rows'
+import { ago, buildRows, duration, sessionStatus, withYouLine } from './rows'
+import type { Row, Status } from './rows'
 import type { Snapshot, SnapshotSession } from '../types'
 
 const NOW = 1_800_000_000_000
@@ -103,4 +104,28 @@ test('an empty session line stays empty in the view', () => {
   const rows = buildRows(snap([s({ line: '', branch: '' })]), 0)
   expect(rows[0]!.main!.line).toBe('')
   expect(rows[0]!.main!.where).toBe('1h 0m')
+})
+
+const mate = (name: string, status: Status = 'live', you = false): Row => ({
+  id: name.toLowerCase(), name, you, status, statusText: '', note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
+})
+
+test('with-you line: nobody else working', () => {
+  expect(withYouLine([])).toBe('No one else is working right now.')
+  expect(withYouLine([mate('Me', 'live', true), mate('Hoa', 'idle'), mate('Nam', 'offline')])).toBe('No one else is working right now.')
+})
+
+test('with-you line: one teammate', () => {
+  expect(withYouLine([mate('Me', 'live', true), mate('Linh'), mate('Hoa', 'idle')])).toBe('Linh is with you right now')
+})
+
+test('with-you line: two teammates', () => {
+  expect(withYouLine([mate('Linh'), mate('Mai'), mate('Me', 'live', true)])).toBe('Linh and Mai are with you right now')
+})
+
+test('with-you line: three or more name the first two and count the rest', () => {
+  expect(withYouLine([mate('Linh'), mate('Mai'), mate('Nam')])).toBe('Linh, Mai and 1 others are with you right now')
+  expect(withYouLine([mate('Linh'), mate('Mai'), mate('Nam'), mate('Hoa'), mate('Me', 'live', true), mate('Tu', 'idle')])).toBe(
+    'Linh, Mai and 2 others are with you right now'
+  )
 })

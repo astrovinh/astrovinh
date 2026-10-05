@@ -84,3 +84,12 @@ export function buildRows(snap: Snapshot, elapsedMs: number): Row[] {
   rows.sort((a, b) => RANK[a.row.status] - RANK[b.row.status] || b.count - a.count || b.lastSeen - a.lastSeen)
   return rows.map(r => r.row)
 }
+
+/** The panel header: which teammates (not you) are working right now. */
+export function withYouLine(rows: Row[]): string {
+  const names = rows.filter(r => !r.you && r.status === 'live').map(r => r.name)
+  if (names.length === 0) return 'No one else is working right now.'
+  if (names.length === 1) return `${names[0]} is with you right now`
+  if (names.length === 2) return `${names[0]} and ${names[1]} are with you right now`
+  return `${names[0]}, ${names[1]} and ${names.length - 2} others are with you right now`
+}

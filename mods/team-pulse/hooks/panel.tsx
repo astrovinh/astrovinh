@@ -3,7 +3,7 @@
 import type { Snapshot } from '../types'
 import { bubbleSvg, ROW_SVG_H, ROW_SVG_W, rowSvg, textBar } from './draw'
 import type { Row } from './rows'
-import { ago } from './rows'
+import { ago, withYouLine } from './rows'
 import { cap } from './share'
 import { strip } from './strip'
 
@@ -39,9 +39,12 @@ export function drawPanel(
 
   return (
     <Box flexDirection="column">
-      <Box paddingX={2} paddingY={1} justifyContent="space-between">
-        <Text bold>{snap.team}</Text>
-        <Text dimColor>{`${live} live \u00b7 ${v.rows.length}`}</Text>
+      <Box flexDirection="column" paddingX={2} paddingY={1}>
+        <Box justifyContent="space-between">
+          <Text bold>{snap.team}</Text>
+          <Text dimColor>{`${live} live \u00b7 ${v.rows.length}`}</Text>
+        </Box>
+        <Text dimColor wrap="truncate">{withYouLine(v.rows)}</Text>
       </Box>
       {v.problem ? (
         <Box paddingX={2}>
