@@ -6,7 +6,7 @@ import { bandSvg, BAND_H, contextCells, detailSvg, limitCells, usd } from './bar
 import type { Cell } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
-import { parseBattery, parseCpu, parseDisk, parseMemory } from './system'
+import { parseCpu, parseDisk, parseMemory } from './system'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
 const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
@@ -35,10 +35,9 @@ async function pollSystem($: any) {
   try {
     if (!cores) cores = Number((await run($, ['sysctl', '-n', 'hw.ncpu'])).trim()) || 0
     if (!memoryBytes) memoryBytes = Number((await run($, ['sysctl', '-n', 'hw.memsize'])).trim()) || 0
-    const [ps, pressure, batt] = await Promise.all([
+    const [ps, pressure] = await Promise.all([
       run($, ['ps', '-A', '-o', '%cpu=']),
-      run($, ['memory_pressure', '-Q']),
-      run($, ['pmset', '-g', 'batt'])
+      run($, ['memory_pressure', '-Q'])
     ])
     // macOS keeps user files on the Data volume; `/` is the sealed system snapshot.
     const df = (await run($, ['df', '-k', '/System/Volumes/Data'])) || (await run($, ['df', '-k', '/']))
@@ -48,7 +47,7 @@ async function pollSystem($: any) {
       memory: parseMemory(pressure),
       memoryGb: memoryBytes ? memoryBytes / 1e9 : null,
       disk: parseDisk(df),
-      battery: parseBattery(batt)
+      battery: null
     }))
   } finally {
     polling = false
@@ -153,8 +152,7 @@ export const register: Register = on => {
             {[
               sys.cpu === null ? '' : `CPU ${Math.round(sys.cpu)}%`,
               sys.memory === null ? '' : `Mem ${Math.round(sys.memory)}%`,
-              sys.disk === null ? '' : `Disk ${Math.round(sys.disk.percent)}%`,
-              sys.battery === null ? '' : `Bat ${Math.round(sys.battery.percent)}%`
+              sys.disk === null ? '' : `Disk ${Math.round(sys.disk.percent)}%`
             ]
               .filter(Boolean)
               .map(t => `   ${t}`)
