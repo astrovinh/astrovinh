@@ -11,7 +11,13 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 ```
 
 2. Open a new Claude Code session. If you don't see the team line under your prompt, quit Claude Code and open it again.
-3. Type `/team join <code> <your name>`. Ask Astro for the code. Use the name your teammates know you by.
+3. Type `/team join` followed by the code and your name, without the `< >`. For example:
+
+```
+/team join abcd234xyz.k2m3n4p5 Linh
+```
+
+   That code is only an example. Ask Astro for the real one. Use the name your teammates know you by.
 
 ## Every day
 
@@ -19,6 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 |---|---|
 | `/team` | Opens or closes the team panel. It stays open in new sessions until you close it. |
 | The line under your prompt, like "Online members 🟢 Linh 🟡 Mai" | Green means working. Yellow means idle. |
+| `/team name <new name>` | Changes the name your teammates see. |
 | `/team status <note>` | Sets an away note that shows under your name. It stays until you clear it. |
 | `/team status` | Clears your away note. |
 | `/team say <text>` | Writes your own "working on" line. |

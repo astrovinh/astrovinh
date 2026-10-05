@@ -63,7 +63,7 @@ PY
   echo "Done. The Murror team mod is installed."
   echo "Next:"
   echo "  1. Open a NEW Claude Code session (if the team line does not appear, quit Claude Code and open it again)."
-  echo "  2. Type: /team join <code> <your name>   (ask Astro for the code)"
+  echo "  2. Type: /team join followed by the code and your name (ask Astro for the code)"
   echo "Guide: $MOD/GUIDE.md"
 }
 

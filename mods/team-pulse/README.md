@@ -33,4 +33,5 @@ Run the one-line installer in GUIDE.md, or add `mods/team-pulse` to Claude Code'
 - `/team pause` and `/team resume`: stop and restart sharing on this Mac
 - `/team say <text>`: set your line yourself; `/team say` alone goes back to automatic lines
 - `/team status <note>`: set an away note teammates see next to your name, even while you are offline; `/team status` alone clears it
+- `/team name <new name>`: change the name your teammates see
 - `/team leave`: leave the team and delete your shared data
