@@ -2,6 +2,14 @@
 
 See who on the team is working in Claude Code, what they are working on, and their limits. You can also leave an away note.
 
+## What's new (Oct 4)
+
+Already installed? Update in two steps: run the install command below again, then open a new Claude Code session.
+
+- **Change your name:** type `/team name` followed by the name you want, for example `/team name Brian`. Handy if you joined with a typo or with the `< >` from the old example.
+- **Split view works:** type `/team` in the half where you want the panel. Use the right-hand half to keep it at the edge of the window.
+- **No more `< >` mix-ups:** joining with `<Linh>` now joins you as Linh.
+
 ## Install (2 minutes)
 
 1. Paste this in your terminal:
@@ -67,6 +75,9 @@ Try again in a few minutes. Check your internet. Tell Astro if it lasts.
 
 **The panel disappeared when I used split view.**
 Split view makes each half narrow, and the panel only reopens by itself when there is room. Type `/team` in the half where you want it.
+
+**I joined with the wrong name.**
+Type `/team name` followed by the right name, for example `/team name Brian`.
 
 **I want to stop sharing.**
 Type `/team pause`. To leave the team and delete your data, type `/team leave`.
