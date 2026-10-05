@@ -2,9 +2,16 @@
 
 See who on the team is working in Claude Code, what they are working on, and their limits. You can also leave an away note.
 
-## What's new (Oct 4)
+## What's new (Oct 5)
 
 Already installed? Update in two steps: run the install command below again, then open a new Claude Code session.
+
+- **Animal avatars:** every teammate gets their own pixel animal in the panel, with a small dot for working, idle or offline. It stays the same if they change their name.
+- **"With you right now":** the top of the panel tells you who else is working at this moment.
+- **Longer away notes:** `/team status` notes can be up to 280 characters and show on several lines.
+- **Your repo folder name is no longer shared.** Teammates see your git branch and what you are working on, not the folder.
+
+## What's new (Oct 4)
 
 - **Change your name:** type `/team name` followed by the name you want, for example `/team name Brian`. Handy if you joined with a typo or with the `< >` from the old example.
 - **Split view works:** type `/team` in the half where you want the panel. Use the right-hand half to keep it at the edge of the window.
@@ -33,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 | You type or see | What it does |
 |---|---|
 | `/team` | Opens or closes the team panel. It stays open in new sessions until you close it. |
-| The line under your prompt, like "Online members 🟢 Linh 🟡 Mai" | Green means working. Yellow means idle. |
+| The line under your prompt, like "Online members Ⓛ 🅜" | One circled letter per teammate who is online, the first letter of their name. A filled letter means working. An outlined letter means idle. |
 | `/team name <new name>` | Changes the name your teammates see. |
 | `/team status <note>` | Sets an away note that shows under your name. It stays until you clear it. |
 | `/team status` | Clears your away note. |
@@ -46,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 
 - Your name.
 - Whether you are working or idle.
-- Your project folder and git branch, for each open session.
+- Your git branch, for each open session. The repo folder name is not shared.
 - A short AI summary of your latest request. It is made through your own Claude login. Your actual prompt is never shared.
 - Your 5-hour and weekly limit percent.
 - How many Claude Code sessions you have open, and how long each has been open.
@@ -59,7 +66,7 @@ Sharing covers every Claude Code session on this Mac, in any folder, including p
 
 The person who runs the team server (Astro) can read everything it stores.
 
-Never shared: your prompts, Claude's replies, your code, file paths beyond the folder name, or cost.
+Never shared: your prompts, Claude's replies, your code, file paths, folder names, or cost.
 
 Kept for 7 days. `/team leave` deletes everything about you.
 
@@ -68,7 +75,7 @@ Kept for 7 days. `/team leave` deletes everything about you.
 **I don't see the panel or the line.**
 Open a new Claude Code session. Mods load when a session starts.
 
-**My line says the project name instead of what I'm doing.**
+**My line shows my branch, or says "Working in Claude Code", instead of what I'm doing.**
 Send a normal request. Slash commands do not count. A greeting gives no summary.
 
 **It says it can't reach the team server.**
