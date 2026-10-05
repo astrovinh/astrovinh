@@ -8,6 +8,7 @@ Already installed? Update in two steps: run the install command below again, the
 
 - **Change your name:** type `/team name` followed by the name you want, for example `/team name Brian`. Handy if you joined with a typo or with the `< >` from the old example.
 - **Split view works:** type `/team` in the half where you want the panel. Use the right-hand half to keep it at the edge of the window.
+- **Real activity, not just open time:** in the 12h strip, blue is active time (you sent a request or Claude was working on it) and yellow is a session left open but idle. The hours number counts active time only.
 - **No more `< >` mix-ups:** joining with `<Linh>` now joins you as Linh.
 
 ## Install (2 minutes)
