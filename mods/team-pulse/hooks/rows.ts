@@ -91,5 +91,11 @@ export function withYouLine(rows: Row[]): string {
   if (names.length === 0) return 'No one else is working right now.'
   if (names.length === 1) return `${names[0]} is with you right now`
   if (names.length === 2) return `${names[0]} and ${names[1]} are with you right now`
-  return `${names[0]}, ${names[1]} and ${names.length - 2} others are with you right now`
+  const rest = names.length - 2
+  return `${names[0]}, ${names[1]} and ${rest} ${rest === 1 ? 'other' : 'others'} are with you right now`
+}
+
+/** One line for a session listed under "other sessions": what it does and where, without a stray separator. */
+export function otherLine(o: SessionView): string {
+  return [o.line || 'Working in Claude Code', o.where].filter(Boolean).join(' \u00b7 ')
 }

@@ -4,6 +4,13 @@ import type { Res } from './util'
 
 export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 280 } as const
 
+/** Removes a leading repo folder name from a line: "<folder> \u00b7 main" becomes "main", "<folder>" becomes "". Anything else is kept. */
+export function withoutFolder(line: string, folder: string): string {
+  if (!folder) return line
+  if (line === folder) return ''
+  return line.startsWith(`${folder} \u00b7 `) ? line.slice(folder.length + 3) : line
+}
+
 export class Team extends DurableObject {
   sql: SqlStorage
   hits = new Map<string, number[]>()
@@ -31,6 +38,22 @@ export class Team extends DurableObject {
     // Segments recorded before active vs idle existed were all treated as working, so that is the default.
     const segCols = this.sql.exec('PRAGMA table_info(segments)').toArray().map(r => String(r.name))
     if (!segCols.includes('state')) this.sql.exec("ALTER TABLE segments ADD COLUMN state TEXT NOT NULL DEFAULT 'working'")
+    this.clearStoredProjects()
+  }
+
+  /**
+   * The repo folder name is not shared any more. Rows stored before that still hold it, in `project` and, for older
+   * clients, as the start of `line`. Runs once; a second construction finds the meta key and does nothing.
+   */
+  protected clearStoredProjects() {
+    if (this.meta('project_cleared') === '1') return
+    for (const r of this.sql.exec("SELECT id, project, line FROM sessions WHERE project != ''").toArray()) {
+      const line = withoutFolder(String(r.line), String(r.project))
+      if (line !== String(r.line)) this.sql.exec('UPDATE sessions SET line = ? WHERE id = ?', line, String(r.id))
+    }
+    this.sql.exec("UPDATE sessions SET project = ''")
+    this.setMeta('project_cleared', '1')
+    this.view = null
   }
 
   protected meta(k: string): string | null {
@@ -136,8 +159,8 @@ export class Team extends DurableObject {
        ON CONFLICT(id) DO UPDATE SET project = excluded.project, branch = excluded.branch, line = excluded.line,
          state = excluded.state, state_since = excluded.state_since, five_hour = excluded.five_hour, week = excluded.week,
          started_at = excluded.started_at, seen_at = excluded.seen_at`,
-      // The repo folder name is not shared any more: older clients may still send one, it is dropped here.
-      sid, me.id, '', text(body?.branch, CAPS.branch), text(body?.line, CAPS.line),
+      // The repo folder name is not shared any more: older clients still send it as `project` and at the start of `line`; both are dropped here.
+      sid, me.id, '', text(body?.branch, CAPS.branch), withoutFolder(text(body?.line, CAPS.line), text(body?.project, CAPS.project)),
       state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now
     )
     // A new session shows on the next poll; an existing one waits for the shared view to rebuild, or every heartbeat would rebuild it.
@@ -188,7 +211,7 @@ export class Team extends DurableObject {
         status: String(m.status) || null, statusAt: String(m.status) ? Number(m.status_at) : null
       })),
       sessions: sessions.map(s => ({
-        id: String(s.id), member: String(s.member), project: String(s.project), branch: String(s.branch), line: String(s.line),
+        id: String(s.id), member: String(s.member), project: '', branch: String(s.branch), line: String(s.line),
         state: String(s.state), stateSince: Number(s.state_since), fiveHour: s.five_hour === null ? null : Number(s.five_hour),
         week: s.week === null ? null : Number(s.week), startedAt: Number(s.started_at), seenAt: Number(s.seen_at)
       })),

@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { ago, buildRows, duration, sessionStatus, withYouLine } from './rows'
+import { ago, buildRows, duration, otherLine, sessionStatus, withYouLine } from './rows'
 import type { Row, Status } from './rows'
 import type { Snapshot, SnapshotSession } from '../types'
 
@@ -124,8 +124,15 @@ test('with-you line: two teammates', () => {
 })
 
 test('with-you line: three or more name the first two and count the rest', () => {
-  expect(withYouLine([mate('Linh'), mate('Mai'), mate('Nam')])).toBe('Linh, Mai and 1 others are with you right now')
+  expect(withYouLine([mate('Linh'), mate('Mai'), mate('Nam')])).toBe('Linh, Mai and 1 other are with you right now')
   expect(withYouLine([mate('Linh'), mate('Mai'), mate('Nam'), mate('Hoa'), mate('Me', 'live', true), mate('Tu', 'idle')])).toBe(
     'Linh, Mai and 2 others are with you right now'
   )
+})
+
+test('an other session shows its line, or says it is working when the line is empty', () => {
+  expect(otherLine({ id: '2', line: 'Fixing restore', where: 'main \u00b7 5m' })).toBe('Fixing restore \u00b7 main \u00b7 5m')
+  expect(otherLine({ id: '2', line: '', where: 'main \u00b7 5m' })).toBe('Working in Claude Code \u00b7 main \u00b7 5m')
+  expect(otherLine({ id: '2', line: '', where: '' })).toBe('Working in Claude Code')
+  expect(otherLine({ id: '2', line: 'Fixing restore', where: '' })).toBe('Fixing restore')
 })

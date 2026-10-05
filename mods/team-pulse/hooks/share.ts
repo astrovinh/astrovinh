@@ -3,11 +3,10 @@
 import type { Heartbeat } from '../types'
 import { IDLE_AFTER_MS } from './config'
 
-export const LIMITS = { session: 32, project: 64, branch: 96, line: 120 } as const
+export const LIMITS = { session: 32, branch: 96, line: 120 } as const
 
 export type SessionFacts = {
   session: string
-  cwd: string
   branch: string
   line: string
   lastTurnAt: number
@@ -21,12 +20,6 @@ export type SessionFacts = {
 export function cap(s: string, n: number): string {
   const t = s.replace(/\s+/g, ' ').trim()
   return t.length <= n ? t : `${t.slice(0, n - 1)}\u2026`
-}
-
-/** The last folder of a path: the project name, never the path itself. */
-export function basename(path: string): string {
-  const parts = path.replace(/\/+$/, '').split('/')
-  return parts[parts.length - 1] || path
 }
 
 const percent = (n: number | null | undefined) => (typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null)

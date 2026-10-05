@@ -92,10 +92,10 @@ test('the age goes on its own extra line when the last line has no room for it',
   const lines = textLines(b.source)
   expect(lines.length).toBe(2)
   expect(noteWidth(lines[1]! + ' \u00b7 3h') > 270).toBe(true)
-  expect(b.source.includes(' \u00b7 3h')).toBe(true)
   expect(b.height).toBe(heightOf(3))
-  // the age line is drawn below the note lines
-  expect(/<tspan x="10" y="[\d.]+" fill="#8b8b8b"> \u00b7 3h<\/tspan>/.test(b.source)).toBe(true)
+  // the age line is drawn below the note lines, without the leading separator
+  expect(/<tspan x="10" y="[\d.]+" fill="#8b8b8b">3h<\/tspan>/.test(b.source)).toBe(true)
+  expect(b.source.includes('\u00b7')).toBe(false)
 })
 
 test('a 60-character single word is broken safely across lines', () => {
@@ -109,7 +109,7 @@ test('a 60-character single word is broken safely across lines', () => {
 })
 
 test('the age is always shown, with or without a cut', () => {
-  expect(bubbleSvg('x'.repeat(2000), '3h', 290).source.includes(' \u00b7 3h')).toBe(true)
+  expect(/>3h</.test(bubbleSvg('x'.repeat(2000), '3h', 290).source)).toBe(true)
   expect(bubbleSvg('lunch', '12m', 290).source.includes(' \u00b7 12m')).toBe(true)
   expect(bubbleSvg('lunch', null, 290).source.includes('\u00b7')).toBe(false)
   expect(bubbleSvg('lunch', null, 290).alt).toBe('Status: lunch')

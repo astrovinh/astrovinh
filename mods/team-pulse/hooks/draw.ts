@@ -150,7 +150,7 @@ export function bubbleSvg(note: string, age: string | null, maxWidth: number): {
   const tspans = lines
     .map((l, i) => `<tspan x="${TEXT_X}" y="${baseline(i)}" fill="#ecebe6">${esc(l)}</tspan>` + (ageInline && i === lines.length - 1 ? `<tspan fill="${INK}">${esc(ageText)}</tspan>` : ''))
     .join('')
-  const ageLine = ageText && !ageInline ? `<tspan x="${TEXT_X}" y="${baseline(lines.length)}" fill="${INK}">${esc(ageText)}</tspan>` : ''
+  const ageLine = ageText && !ageInline ? `<tspan x="${TEXT_X}" y="${baseline(lines.length)}" fill="${INK}">${esc(age ?? '')}</tspan>` : ''
   const source =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" ` +
     `font-family="-apple-system,BlinkMacSystemFont,'Apple Color Emoji','Segoe UI',system-ui,sans-serif" font-size="11.5">` +

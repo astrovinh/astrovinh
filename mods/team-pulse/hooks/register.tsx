@@ -66,7 +66,6 @@ async function beat($: any) {
   const said = (await $.store.get('said')) as string | null | undefined
   const hb = buildHeartbeat({
     session: sessionId,
-    cwd,
     branch,
     line: said || line || fallbackLine(branch),
     lastTurnAt,

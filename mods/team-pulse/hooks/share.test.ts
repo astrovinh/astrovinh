@@ -1,9 +1,8 @@
 import { test, expect } from 'claude-code/testing'
-import { basename, buildHeartbeat, cap } from './share'
+import { buildHeartbeat, cap } from './share'
 
 const facts = {
   session: 'abc123',
-  cwd: '/Users/linh/code/mobile-app/',
   branch: 'fix/paywall-restore',
   line: 'Fixing purchase restore on iOS',
   lastTurnAt: 1_000_000,
@@ -21,8 +20,6 @@ test('a heartbeat carries exactly the allowed fields', () => {
 test('the repo folder name is never shared: project is always empty', () => {
   expect(buildHeartbeat(facts).project).toBe('')
   expect(JSON.stringify(buildHeartbeat(facts)).includes('mobile-app')).toBe(false)
-  expect(basename('/a/b/c')).toBe('c')
-  expect(basename('c')).toBe('c')
 })
 
 test('every text field is capped and whitespace is collapsed', () => {

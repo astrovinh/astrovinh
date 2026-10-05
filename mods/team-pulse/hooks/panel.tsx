@@ -4,7 +4,7 @@ import type { Snapshot } from '../types'
 import { avatarSvg } from './avatar'
 import { bubbleSvg, ROW_SVG_H, ROW_SVG_W, rowSvg, textBar } from './draw'
 import type { Row } from './rows'
-import { ago, withYouLine } from './rows'
+import { ago, otherLine, withYouLine } from './rows'
 import { cap } from './share'
 import { strip } from './strip'
 
@@ -104,7 +104,7 @@ export function drawPanel(
             {r.others.length ? (
               <Button key={`expand:${r.id}`} plain onPress={() => v.onExpand(r.id)} label={open ? 'Hide other sessions' : `+${r.others.length} more session${r.others.length === 1 ? '' : 's'}`} />
             ) : null}
-            {open ? r.others.map(o => <Text key={`s:${o.id}`} dimColor wrap="truncate">{`${o.line} \u00b7 ${o.where}`}</Text>) : null}
+            {open ? r.others.map(o => <Text key={`s:${o.id}`} dimColor wrap="truncate">{otherLine(o)}</Text>) : null}
           </Box>
         )
       })}

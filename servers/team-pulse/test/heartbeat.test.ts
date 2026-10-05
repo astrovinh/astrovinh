@@ -1,3 +1,4 @@
+import { env, runInDurableObject } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { T0, api, newTeam } from './helpers'
 
@@ -28,6 +29,71 @@ describe('heartbeats and the snapshot', () => {
     await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb({ project: 'secret-repo-2' }), now: T0 + 60_000 })
     snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 70_000 })
     expect(snap.body.sessions[0].project).toBe('')
+  })
+
+  it('drops the folder an old client puts at the start of its line', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    const send = (sid: string, line: string) => api('PUT', `/teams/${teamId}/sessions/${sid}`, { key: linh.key, body: hb({ session: sid, project: 'secret-repo', line }) })
+    await send('s1', 'secret-repo \u00b7 main')
+    await send('s2', 'secret-repo')
+    await send('s3', 'Fixing the secret-repo restore flow')
+    await send('s4', 'secret-repository cleanup')
+    await send('s5', 'secret-repo \u00b7 ')
+    const snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 5_000 })
+    const lines = Object.fromEntries(snap.body.sessions.map((s: any) => [s.id, s.line]))
+    expect(lines.s1).toBe('main')
+    expect(lines.s2).toBe('')
+    // a real AI line that only mentions the folder later in the text is kept untouched
+    expect(lines.s3).toBe('Fixing the secret-repo restore flow')
+    expect(lines.s4).toBe('secret-repository cleanup')
+    expect(snap.body.sessions.every((s: any) => s.project === '')).toBe(true)
+  })
+
+  it('an old-style body leaves the folder nowhere in the snapshot', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb({ project: 'secret-repo', line: 'secret-repo \u00b7 main' }) })
+    const snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 5_000 })
+    expect(JSON.stringify(snap.body).includes('secret-repo')).toBe(false)
+    expect(snap.body.sessions[0].line).toBe('main')
+  })
+
+  it('a folder name an old client sent as a plain line becomes an empty line', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb({ project: 'secret-repo', line: 'secret-repo' }) })
+    const snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 5_000 })
+    expect(snap.body.sessions[0].line).toBe('')
+  })
+
+  it('the one-time cleanup clears rows stored before the change, and runs only once', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb({ line: 'x' }) })
+    const ns = (env as any).TEAM as DurableObjectNamespace
+    const stub: any = ns.get(ns.idFromName(teamId))
+    const rows: any = await (runInDurableObject as any)(stub, (instance: any, state: any) => {
+      const sql = state.storage.sql
+      const old = (id: string, project: string, line: string) =>
+        sql.exec('INSERT INTO sessions (id, member, project, branch, line, state, state_since, five_hour, week, started_at, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)', id, 'm', project, 'main', line, 'working', 1, 1, T0)
+      // stored by the code before this change
+      old('old1', 'secret-repo', 'secret-repo \u00b7 main')
+      old('old2', 'secret-repo', 'secret-repo')
+      old('old3', 'secret-repo', 'Fixing the secret-repo flow')
+      sql.exec("DELETE FROM meta WHERE k = 'project_cleared'")
+      const again = () => new (instance.constructor as any)(state, env)
+      again()
+      const first = sql.exec('SELECT id, project, line FROM sessions WHERE id LIKE ? ORDER BY id', 'old%').toArray().map((r: any) => [r.id, r.project, r.line])
+      const flag = sql.exec("SELECT v FROM meta WHERE k = 'project_cleared'").toArray()[0]?.v
+      // a row written afterwards (by hand, with a folder) must survive a second construction: the cleanup is done
+      old('late', 'later-repo', 'later-repo')
+      again()
+      const second = sql.exec("SELECT project, line FROM sessions WHERE id = 'late'").toArray()[0]
+      return { first, flag, second }
+    })
+    expect(rows.first).toEqual([['old1', '', 'main'], ['old2', '', ''], ['old3', '', 'Fixing the secret-repo flow']])
+    expect(rows.flag).toBe('1')
+    expect(rows.second).toEqual({ project: 'later-repo', line: 'later-repo' })
+    // whatever the table holds, the snapshot never returns a project
+    const snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 5_000 })
+    expect(snap.body.sessions.every((s: any) => s.project === '')).toBe(true)
   })
 
   it('turns away a missing or unknown key', async () => {

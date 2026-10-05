@@ -30,6 +30,11 @@ test('an initial that is not A to Z stays as the character itself, uppercased', 
   expect(presenceLine({ ...base, rows: [row('\u3042ki')] })).toBe('Online members \u3042')
 })
 
+test('a non-latin initial is the character as typed, not its decomposed form', () => {
+  // A Hangul syllable decomposes into two jamo under NFD; the line must show the syllable itself.
+  expect(presenceLine({ ...base, rows: [row('\uac00\ub098')] })).toBe('Online members \uac00')
+})
+
 test('you are excluded from the list', () => {
   const rows = [row('Me', 'live', true), row('Linh')]
   expect(presenceLine({ ...base, rows })).toBe(`Online members ${live('L')}`)

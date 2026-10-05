@@ -16,7 +16,8 @@ export function glyph(name: string, live: boolean): string {
   // D with a stroke has no decomposition, so it is mapped by hand.
   const letter = first === '\u0110' || first === '\u0111' ? 'D' : first.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
   const i = letter.length === 1 ? letter.charCodeAt(0) - 65 : -1
-  if (i < 0 || i > 25) return Array.from(letter)[0] ?? first
+  // Not A to Z: the character as typed (upper case), never its decomposed form.
+  if (i < 0 || i > 25) return Array.from(first.toUpperCase())[0] ?? first
   return String.fromCodePoint((live ? 0x1f150 : 0x24b6) + i)
 }
 
