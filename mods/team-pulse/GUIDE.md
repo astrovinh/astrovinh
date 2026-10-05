@@ -10,6 +10,7 @@ Already installed? Update in two steps: run the install command below again, the
 - **"With you right now":** the top of the panel tells you who else is working at this moment.
 - **Longer away notes:** `/team status` notes can be up to 280 characters and show on several lines.
 - **Your repo folder name is no longer shared.** Teammates see your git branch and what you are working on, not the folder.
+- **No more duplicate names:** joining a team you are already on now tells you so instead of adding you a second time, and your open sessions keep showing up even if you rejoin. Joined twice already? Ask Astro to remove the extra name.
 
 ## What's new (Oct 4)
 
