@@ -2,34 +2,52 @@ import { test, expect } from 'claude-code/testing'
 import { presenceLine } from './presence'
 import type { Row, Status } from './rows'
 
-const GREEN = '\u{1F7E2}'
-const YELLOW = '\u{1F7E1}'
+// Live (working) is a filled circled letter, idle is an outlined circled letter.
+const live = (letter: string) => String.fromCodePoint(0x1f150 + letter.charCodeAt(0) - 65)
+const idle = (letter: string) => String.fromCodePoint(0x24b6 + letter.charCodeAt(0) - 65)
 const DOT = '\u00b7'
 const row = (name: string, status: Status = 'live', you = false): Row => ({
   id: name.toLowerCase(), name, you, status, statusText: '', note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
 })
 const base = { rows: [] as Row[], paused: false, problem: null as string | null, hasSnapshot: true }
 
+test('a live teammate is the filled circled initial', () => {
+  expect(presenceLine({ ...base, rows: [row('Aki')] })).toBe('Online members \u{1F150}')
+  expect(presenceLine({ ...base, rows: [row('aki')] })).toBe('Online members \u{1F150}')
+})
+
+test('an idle teammate is the outlined circled initial', () => {
+  expect(presenceLine({ ...base, rows: [row('Aki', 'idle')] })).toBe('Online members \u24b6')
+})
+
+test('an accented initial loses its accent: a name starting with D-bar is a filled D', () => {
+  expect(presenceLine({ ...base, rows: [row('\u0110\u1ee9c')] })).toBe(`Online members ${live('D')}`)
+  expect(presenceLine({ ...base, rows: [row('\u00c9mile', 'idle')] })).toBe(`Online members ${idle('E')}`)
+})
+
+test('an initial that is not A to Z stays as the character itself, uppercased', () => {
+  expect(presenceLine({ ...base, rows: [row('9lives')] })).toBe('Online members 9')
+  expect(presenceLine({ ...base, rows: [row('\u3042ki')] })).toBe('Online members \u3042')
+})
+
 test('you are excluded from the list', () => {
   const rows = [row('Me', 'live', true), row('Linh')]
-  expect(presenceLine({ ...base, rows })).toBe(`Online members ${GREEN} Linh`)
+  expect(presenceLine({ ...base, rows })).toBe(`Online members ${live('L')}`)
 })
 
 test('offline teammates are not listed', () => {
   const rows = [row('Linh'), row('Hoa', 'offline'), row('Mai', 'idle')]
-  expect(presenceLine({ ...base, rows })).toBe(`Online members ${GREEN} Linh ${YELLOW} Mai`)
+  expect(presenceLine({ ...base, rows })).toBe(`Online members ${live('L')} ${idle('M')}`)
 })
 
-test('live is green, idle is yellow, in the order the rows come', () => {
+test('glyphs come in the order the rows come, one space apart', () => {
   const rows = [row('Tuan'), row('Linh', 'live'), row('Mai', 'idle'), row('Nam', 'idle')]
-  expect(presenceLine({ ...base, rows })).toBe(`Online members ${GREEN} Tuan ${GREEN} Linh ${YELLOW} Mai ${YELLOW} Nam`)
+  expect(presenceLine({ ...base, rows })).toBe(`Online members ${live('T')} ${live('L')} ${idle('M')} ${idle('N')}`)
 })
 
-test('eight online teammates show six names then a count of the other two', () => {
+test('eight online teammates show six glyphs then a count of the other two', () => {
   const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(n => row(n))
-  expect(presenceLine({ ...base, rows })).toBe(
-    `Online members ${GREEN} A ${GREEN} B ${GREEN} C ${GREEN} D ${GREEN} E ${GREEN} F +2`
-  )
+  expect(presenceLine({ ...base, rows })).toBe(`Online members ${['A', 'B', 'C', 'D', 'E', 'F'].map(live).join(' ')} +2`)
 })
 
 test('exactly six online teammates show no count', () => {
@@ -39,9 +57,7 @@ test('exactly six online teammates show no count', () => {
 
 test('offline teammates do not count toward the plus number', () => {
   const rows = [...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(n => row(n)), row('X', 'offline'), row('Y', 'offline')]
-  expect(presenceLine({ ...base, rows })).toBe(
-    `Online members ${GREEN} A ${GREEN} B ${GREEN} C ${GREEN} D ${GREEN} E ${GREEN} F +1`
-  )
+  expect(presenceLine({ ...base, rows })).toBe(`Online members ${['A', 'B', 'C', 'D', 'E', 'F'].map(live).join(' ')} +1`)
 })
 
 test('nobody online', () => {
@@ -52,7 +68,7 @@ test('nobody online', () => {
 })
 
 test('paused adds a suffix to the list and to the nobody line', () => {
-  expect(presenceLine({ ...base, rows: [row('Tuan')], paused: true })).toBe(`Online members ${GREEN} Tuan ${DOT} sharing paused`)
+  expect(presenceLine({ ...base, rows: [row('Tuan')], paused: true })).toBe(`Online members ${live('T')} ${DOT} sharing paused`)
   expect(presenceLine({ ...base, rows: [], paused: true })).toBe(`Online members ${DOT} nobody right now ${DOT} sharing paused`)
 })
 
