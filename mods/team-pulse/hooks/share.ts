@@ -37,3 +37,13 @@ export function buildHeartbeat(f: SessionFacts): Heartbeat {
     startedAt: f.startedAt
   }
 }
+
+/** The heartbeat session id: the per-process random `base` joined to the member, so a new membership means a new id. */
+export function sessionIdFor(base: string, memberId: string): string {
+  return (base.slice(0, 20) + memberId).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32)
+}
+
+/** `/team join` is refused when the Mac is already on that team; another team replaces the membership. */
+export function joinDecision(current: { teamId: string } | null, codeTeamId: string): 'join' | 'already' {
+  return current && current.teamId === codeTeamId ? 'already' : 'join'
+}

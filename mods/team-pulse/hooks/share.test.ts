@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { buildHeartbeat, cap } from './share'
+import { buildHeartbeat, cap, joinDecision, sessionIdFor } from './share'
 
 const facts = {
   session: 'abc123',
@@ -40,4 +40,31 @@ test('limits outside 0 to 100 or missing become clamped or null', () => {
   expect(buildHeartbeat({ ...facts, fiveHour: 140 }).fiveHour).toBe(100)
   expect(buildHeartbeat({ ...facts, week: undefined }).week).toBe(null)
   expect(buildHeartbeat({ ...facts, week: Number.NaN }).week).toBe(null)
+})
+
+const BASE = 'a1b2c3d4e5f60718293a4b5c'
+
+test('a session id is stable for the same base and member', () => {
+  expect(sessionIdFor(BASE, 'mem_Abc123xyz')).toBe(sessionIdFor(BASE, 'mem_Abc123xyz'))
+})
+
+test('the same base gets a different session id for a different member', () => {
+  expect(sessionIdFor(BASE, 'mem_Abc123xyz')).not.toBe(sessionIdFor(BASE, 'mem_Zzz999qqq'))
+})
+
+test('a session id is 1 to 32 safe characters', () => {
+  expect(sessionIdFor(BASE, 'mem_Abc123xyz')).toMatch(/^[A-Za-z0-9_-]{1,32}$/)
+  expect(sessionIdFor(BASE, 'weird id!/..')).toMatch(/^[A-Za-z0-9_-]{1,32}$/)
+})
+
+test('joining with no membership joins', () => {
+  expect(joinDecision(null, 'team1')).toBe('join')
+})
+
+test('joining the team you are already on is refused', () => {
+  expect(joinDecision({ teamId: 'team1' }, 'team1')).toBe('already')
+})
+
+test('joining a different team replaces the membership', () => {
+  expect(joinDecision({ teamId: 'team1' }, 'team2')).toBe('join')
 })

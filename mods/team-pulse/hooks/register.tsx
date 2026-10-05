@@ -11,7 +11,7 @@ import { drawPanel } from './panel'
 import { paneStateOf, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
-import { buildHeartbeat } from './share'
+import { buildHeartbeat, joinDecision, sessionIdFor } from './share'
 
 const snapshot = atom({ plugin: 'murror', key: 'snapshot' } as const, null as Snapshot | null)
 const fetchedAt = atom({ plugin: 'murror', key: 'fetchedAt' } as const, 0)
@@ -19,7 +19,7 @@ const problem = atom({ plugin: 'murror', key: 'problem' } as const, null as stri
 const expanded = atom({ plugin: 'murror', key: 'expanded' } as const, [] as string[])
 
 // This session's own facts; a reload starts them over, which only delays one heartbeat.
-const sessionId = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('')
+const sessionBase = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('')
 let cwd = ''
 let lastTurnAt = 0
 let lastPrompt = ''
@@ -61,6 +61,7 @@ async function beat($: any) {
   if (!m || (await $.store.get('paused')) === true) return
   const now = await $.clock.now()
   if (now < nextBeatAt) return
+  const sessionId = sessionIdFor(sessionBase, m.memberId)
   const u = await $.session.usage().catch(() => null)
   const branch = await branchOf($)
   const said = (await $.store.get('said')) as string | null | undefined
@@ -203,6 +204,7 @@ async function runCommand($: any, args: string): Promise<string> {
       const name = cleanName(words.join(' '))
       const parsed = parseJoinCode(code)
       if (!parsed || !name) return 'Use /team join <code> <your name>. Ask the team admin for the code.'
+      if (joinDecision(m, parsed.teamId) === 'already') return `You are already on ${m!.team} as ${m!.name}. Use /team name <new name> to change your name.`
       const r = await call<any>($, srv, { method: 'POST', path: `/teams/${parsed.teamId}/join`, body: { code: parsed.secret, name } })
       if (!r.ok) return r.message
       await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name, isAdmin: false })

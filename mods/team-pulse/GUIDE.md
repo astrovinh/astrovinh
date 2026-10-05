@@ -87,6 +87,9 @@ Split view makes each half narrow, and the panel only reopens by itself when the
 **I joined with the wrong name.**
 Type `/team name` followed by the right name, for example `/team name Brian`.
 
+**I joined twice by mistake.**
+Ask Astro to remove the extra name, then keep using the one you want. Use `/team name` to rename instead of joining again.
+
 **I want to stop sharing.**
 Type `/team pause`. To leave the team and delete your data, type `/team leave`.
 
