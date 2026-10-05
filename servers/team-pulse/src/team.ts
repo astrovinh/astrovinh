@@ -186,6 +186,26 @@ export class Team extends DurableObject {
     return ok({ ok: true, status: status || null })
   }
 
+  /** Renames the caller. Name keys stay unique across the team; the unique index backs up the check against a race. */
+  async rename(key: string, body: any, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (this.limited(`nm:${me.id}`, 6, now)) return fail(429, 'Too many name changes. Wait a minute.')
+    const name = text(body?.name, CAPS.name)
+    if (!name) return fail(400, 'Give your new name.')
+    const taken = () => fail(409, `Someone on the team is already called ${name}. Pick a different name.`)
+    const owner = this.sql.exec('SELECT id FROM members WHERE name_key = ?', nameKey(name)).toArray()[0]
+    if (owner && String(owner.id) !== me.id) return taken()
+    if (owner && me.name === name) return ok({ ok: true, name })
+    try {
+      this.sql.exec('UPDATE members SET name = ?, name_key = ? WHERE id = ?', name, nameKey(name), me.id)
+    } catch (e) {
+      if (/UNIQUE constraint failed: members\.name_key/i.test(String(e))) return taken()
+      throw e
+    }
+    return ok({ ok: true, name })
+  }
+
   protected deleteMember(id: string) {
     this.sql.exec('DELETE FROM segments WHERE member = ?', id)
     this.sql.exec('DELETE FROM sessions WHERE member = ?', id)
