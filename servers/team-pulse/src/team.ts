@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers'
 import { fail, nameKey, ok, randomHex, randomId, safeEqual, sha256, text } from './util'
 import type { Res } from './util'
 
-export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 80 } as const
+export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 280 } as const
 
 export class Team extends DurableObject {
   sql: SqlStorage

@@ -28,28 +28,88 @@ test('terminal bars fill in proportion', () => {
   expect(textBar(null, 4)).toBe('\u00b7\u00b7\u00b7\u00b7')
 })
 
-test('a short note fits whole and the bubble is narrower than the maximum', () => {
-  const b = bubbleSvg('lunch', '3h', 290)
-  expect(b.source.includes('>lunch<')).toBe(true)
+const textLines = (source: string) => [...source.matchAll(/<tspan x="10" y="([\d.]+)" fill="#ecebe6">([^<]*)<\/tspan>/g)].map(m => m[2]!)
+const heightOf = (lines: number) => 6 + 8 + lines * 15 + 6
+
+test('a 30-character note is one line and the bubble is narrower than the maximum', () => {
+  const note = 'Back from lunch around two pm.'
+  expect(note.length).toBe(30)
+  const b = bubbleSvg(note, '3h', 290)
+  expect(textLines(b.source)).toEqual([note])
   expect(b.source.includes('\u2026')).toBe(false)
   expect(b.width < 290).toBe(true)
-  expect(b.height).toBe(26)
+  expect(b.height).toBe(heightOf(1))
+  expect(b.alt).toBe(`Status: ${note}, 3h`)
+})
+
+test('a short note keeps its age on the same line', () => {
+  const b = bubbleSvg('lunch', '3h', 290)
+  expect(b.source.includes('>lunch<')).toBe(true)
+  expect(b.source.includes(' \u00b7 3h')).toBe(true)
   expect(b.alt).toBe('Status: lunch, 3h')
+  expect(textLines(b.source).length).toBe(1)
 })
 
-test('a long note is cut with an ellipsis and the bubble is exactly the maximum', () => {
-  const b = bubbleSvg('x'.repeat(200), '3h', 290)
-  expect(b.source.includes('\u2026')).toBe(true)
-  expect(b.source.includes('x'.repeat(200))).toBe(false)
+test('a 200-character note wraps to several lines, fills the width and grows the height', () => {
+  const note = Array.from({ length: 40 }, () => 'word').join(' ').slice(0, 199) + 'x'
+  expect(note.length).toBe(200)
+  const b = bubbleSvg(note, '3h', 290)
+  const lines = textLines(b.source)
+  expect(lines.length).toBeGreaterThanOrEqual(3)
+  expect(lines.length).toBeLessThanOrEqual(5)
   expect(b.width).toBe(290)
-  // the text itself must fit inside the padding
-  const shown = /<tspan[^>]*>(x+)\u2026<\/tspan>/.exec(b.source)
-  expect(shown).not.toBe(null)
-  expect(noteWidth(`${shown![1]}\u2026`) + noteWidth(' \u00b7 3h') + 20 <= 290).toBe(true)
+  const ageLine = /<tspan x="10" y="[\d.]+" fill="#8b8b8b"/.test(b.source) ? 1 : 0
+  expect(b.height).toBe(heightOf(lines.length + ageLine))
+  for (const l of lines) expect(noteWidth(l) <= 270).toBe(true)
+  expect(b.height > bubbleSvg('hi', '3h', 290).height).toBe(true)
+  expect(b.alt).toBe(`Status: ${note}, 3h`)
 })
 
-test('the age is always shown, even when the note is cut', () => {
-  expect(bubbleSvg('x'.repeat(200), '3h', 290).source.includes(' \u00b7 3h')).toBe(true)
+test('wrapping happens between words, never inside one that fits', () => {
+  const b = bubbleSvg('alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho', null, 290)
+  const lines = textLines(b.source)
+  expect(lines.length).toBeGreaterThanOrEqual(2)
+  expect(lines.join(' ')).toBe('alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho')
+})
+
+test('a 400-character note stops at five lines and the fifth ends with an ellipsis', () => {
+  const note = Array.from({ length: 80 }, (_, i) => `w${i}xyz`).join(' ')
+  expect(note.length > 400).toBe(true)
+  const b = bubbleSvg(note.slice(0, 400), '3h', 290)
+  const lines = textLines(b.source)
+  expect(lines.length).toBe(5)
+  expect(lines[4]!.endsWith('\u2026')).toBe(true)
+  expect(lines.slice(0, 4).some(l => l.includes('\u2026'))).toBe(false)
+  for (const l of lines) expect(noteWidth(l) <= 270).toBe(true)
+  expect(b.width).toBe(290)
+  expect(b.alt).toBe(`Status: ${note.slice(0, 400)}, 3h`)
+})
+
+test('the age goes on its own extra line when the last line has no room for it', () => {
+  // A last line that nearly fills the width cannot take the age.
+  const full = 'x'.repeat(42)
+  const b = bubbleSvg(`${full} ${full}`, '3h', 290)
+  const lines = textLines(b.source)
+  expect(lines.length).toBe(2)
+  expect(noteWidth(lines[1]! + ' \u00b7 3h') > 270).toBe(true)
+  expect(b.source.includes(' \u00b7 3h')).toBe(true)
+  expect(b.height).toBe(heightOf(3))
+  // the age line is drawn below the note lines
+  expect(/<tspan x="10" y="[\d.]+" fill="#8b8b8b"> \u00b7 3h<\/tspan>/.test(b.source)).toBe(true)
+})
+
+test('a 60-character single word is broken safely across lines', () => {
+  const word = 'x'.repeat(60)
+  const b = bubbleSvg(word, null, 200)
+  const lines = textLines(b.source)
+  expect(lines.length).toBeGreaterThanOrEqual(2)
+  expect(lines.join('')).toBe(word)
+  for (const l of lines) expect(noteWidth(l) <= 180).toBe(true)
+  expect(b.source.includes('\u2026')).toBe(false)
+})
+
+test('the age is always shown, with or without a cut', () => {
+  expect(bubbleSvg('x'.repeat(2000), '3h', 290).source.includes(' \u00b7 3h')).toBe(true)
   expect(bubbleSvg('lunch', '12m', 290).source.includes(' \u00b7 12m')).toBe(true)
   expect(bubbleSvg('lunch', null, 290).source.includes('\u00b7')).toBe(false)
   expect(bubbleSvg('lunch', null, 290).alt).toBe('Status: lunch')
@@ -62,12 +122,13 @@ test('markup in the note is escaped', () => {
   expect(b.alt.includes('<b>')).toBe(false)
 })
 
-test('an emoji note keeps the emoji whole, also when cut', () => {
+test('an emoji note keeps the emoji whole, also when wrapped and cut', () => {
   const e = '\u{1F634}'
   expect(bubbleSvg(`${e} sleeping`, '3h', 290).source.includes(`${e} sleeping`)).toBe(true)
-  const cut = bubbleSvg(`${e.repeat(40)}`, null, 100).source
-  const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(cut)
-  expect(lone).toBe(false)
+  const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
+  for (const [note, w] of [[e.repeat(40), 100], [e.repeat(140), 290], [`${e} `.repeat(120), 290]] as const) {
+    expect(lone.test(bubbleSvg(note, '3h', w).source)).toBe(false)
+  }
 })
 
 test('noteWidth sizes characters by kind', () => {

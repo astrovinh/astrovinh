@@ -44,12 +44,12 @@ describe('away status', () => {
     expect(m.statusAt).toBeNull()
   })
 
-  it('trims, collapses whitespace and cuts to 80 characters', async () => {
+  it('trims, collapses whitespace and cuts to 280 characters', async () => {
     const { teamId, admin } = await newTeam()
-    const r = await setStatus(teamId, admin.key, `  back   soon ${'x'.repeat(100)}`)
-    expect(r.body.status).toBe(`back soon ${'x'.repeat(70)}`)
-    expect(r.body.status).toHaveLength(80)
-    expect(mine(await snap(teamId, admin.key), admin.memberId).status).toHaveLength(80)
+    const r = await setStatus(teamId, admin.key, `  back   soon ${'x'.repeat(400)}`)
+    expect(r.body.status).toBe(`back soon ${'x'.repeat(270)}`)
+    expect(r.body.status).toHaveLength(280)
+    expect(mine(await snap(teamId, admin.key), admin.memberId).status).toHaveLength(280)
   })
 
   it('keeps an emoji intact', async () => {

@@ -69,7 +69,6 @@ export function textBar(p: number | null, cells: number): string {
 const BUBBLE_FILL = '#34332e'
 const BUBBLE_EDGE = '#45433d'
 const BUBBLE_PAD = 20
-export const BUBBLE_H = 26
 
 /** Estimated width in px of a string at font-size 11.5 in the system font; the SVG cannot measure text itself. */
 export function noteWidth(s: string): number {
@@ -81,27 +80,84 @@ export function noteWidth(s: string): number {
   return w * 1.05
 }
 
-/** A chat bubble with a tail pointing up at the name. The note is cut to fit; the age never is. */
+const BUBBLE_LINES = 5
+const LINE_H = 15
+const TEXT_X = 10
+
+/** Splits a word that is wider than a line into pieces that fit, by code points. */
+function breakWord(word: string, room: number): string[] {
+  const pieces: string[] = []
+  let piece = ''
+  for (const ch of word) {
+    if (piece && noteWidth(piece + ch) > room) {
+      pieces.push(piece)
+      piece = ''
+    }
+    piece += ch
+  }
+  if (piece) pieces.push(piece)
+  return pieces
+}
+
+/** Greedy word wrap: every returned line fits `room` px. */
+function wrap(note: string, room: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const word of note.split(' ')) {
+    if (!word) continue
+    const joined = line ? `${line} ${word}` : word
+    if (noteWidth(joined) <= room) {
+      line = joined
+      continue
+    }
+    if (line) lines.push(line)
+    line = ''
+    if (noteWidth(word) <= room) {
+      line = word
+    } else {
+      const pieces = breakWord(word, room)
+      line = pieces.pop() ?? ''
+      lines.push(...pieces)
+    }
+  }
+  lines.push(line)
+  return lines
+}
+
+/** Cuts a line by code points until it and an ellipsis fit. */
+function withEllipsis(line: string, room: number): string {
+  let chars = Array.from(line.trimEnd())
+  while (chars.length > 0 && noteWidth(chars.join('') + '\u2026') > room) chars = chars.slice(0, -1)
+  return chars.join('').trimEnd() + '\u2026'
+}
+
+/**
+ * A chat bubble with a tail pointing up at the name. The note wraps into at most five lines and the last one ends
+ * with an ellipsis if text remains; the age goes after the last line, or on a line of its own when it does not fit.
+ */
 export function bubbleSvg(note: string, age: string | null, maxWidth: number): { source: string; alt: string; width: number; height: number } {
   const ageText = age ? ` \u00b7 ${age}` : ''
-  const room = maxWidth - BUBBLE_PAD - noteWidth(ageText)
-  let chars = Array.from(note)
-  let shown = note
-  if (noteWidth(note) > room) {
-    while (chars.length > 0 && noteWidth(chars.join('') + '\u2026') > room) chars = chars.slice(0, -1)
-    shown = chars.join('') + '\u2026'
-  }
-  // A cut note fills the whole width; the loop above stops up to one character short of it.
-  const width = shown === note ? Math.min(maxWidth, Math.ceil(noteWidth(shown) + noteWidth(ageText) + BUBBLE_PAD)) : maxWidth
+  const room = maxWidth - BUBBLE_PAD
+  let lines = wrap(note, room)
+  if (lines.length > BUBBLE_LINES) lines = [...lines.slice(0, BUBBLE_LINES - 1), withEllipsis(lines[BUBBLE_LINES - 1]!, room)]
+  const last = lines[lines.length - 1]!
+  const ageInline = !!ageText && noteWidth(last + ageText) <= room
+  const count = lines.length + (ageText && !ageInline ? 1 : 0)
+  // A single line is only as wide as it needs to be; anything longer fills the width.
+  const width = count === 1 ? Math.min(maxWidth, Math.ceil(noteWidth(last) + noteWidth(ageText) + BUBBLE_PAD)) : maxWidth
+  const height = 6 + 8 + count * LINE_H + 6
+  const baseline = (i: number) => 6 + 8 + i * LINE_H + 11.5
+  const tspans = lines
+    .map((l, i) => `<tspan x="${TEXT_X}" y="${baseline(i)}" fill="#ecebe6">${esc(l)}</tspan>` + (ageInline && i === lines.length - 1 ? `<tspan fill="${INK}">${esc(ageText)}</tspan>` : ''))
+    .join('')
+  const ageLine = ageText && !ageInline ? `<tspan x="${TEXT_X}" y="${baseline(lines.length)}" fill="${INK}">${esc(ageText)}</tspan>` : ''
   const source =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${BUBBLE_H}" viewBox="0 0 ${width} ${BUBBLE_H}" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" ` +
     `font-family="-apple-system,BlinkMacSystemFont,'Apple Color Emoji','Segoe UI',system-ui,sans-serif" font-size="11.5">` +
-    `<rect x="0.5" y="6.5" width="${width - 1}" height="19" rx="10" fill="${BUBBLE_FILL}" stroke="${BUBBLE_EDGE}" stroke-width="1"/>` +
+    `<rect x="0.5" y="6.5" width="${width - 1}" height="${height - 7}" rx="10" fill="${BUBBLE_FILL}" stroke="${BUBBLE_EDGE}" stroke-width="1"/>` +
     // The tail's fill hides the rect's top edge under it; only its two upper edges are stroked.
     `<path d="M12 7 L12 6.5 L17 0.5 L22 6.5 L22 7 Z" fill="${BUBBLE_FILL}"/>` +
     `<path d="M12 6.5 L17 0.5 L22 6.5" fill="none" stroke="${BUBBLE_EDGE}" stroke-width="1" stroke-linejoin="round"/>` +
-    `<text x="10" y="20" xml:space="preserve"><tspan fill="#ecebe6">${esc(shown)}</tspan>` +
-    (ageText ? `<tspan fill="${INK}">${esc(ageText)}</tspan>` : '') +
-    `</text></svg>`
-  return { source, alt: esc(`Status: ${note}${age ? `, ${age}` : ''}`), width, height: BUBBLE_H }
+    `<text xml:space="preserve">${tspans}${ageLine}</text></svg>`
+  return { source, alt: esc(`Status: ${note}${age ? `, ${age}` : ''}`), width, height }
 }
