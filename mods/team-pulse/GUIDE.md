@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 - A short AI summary of your latest request. It is made through your own Claude login. Your actual prompt is never shared.
 - Your 5-hour and weekly limit percent.
 - How many Claude Code sessions you have open, and how long each has been open.
-- When you were active in the last 12 hours.
+- When you were active or idle in the last 12 hours (active means you sent a request or Claude was working on it).
 - Your away note, if you set one.
 
 This is sent every 60 seconds while a session is open. Your own row in `/team` shows exactly what is shared about you.

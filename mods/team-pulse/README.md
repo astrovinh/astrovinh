@@ -12,7 +12,7 @@ While a session is open, every 60 seconds, your team pulse mod shares this with 
 - the project folder name and git branch of each open session
 - a one-line summary of what you are working on
 - your 5-hour and weekly Claude limit percentages
-- how many sessions you have open, how long each has been open, and when you were active over the last 12 hours
+- how many sessions you have open, how long each has been open, and, over the last 12 hours, when a session was working for you and when it sat open and idle
 - an away note, if you set one with `/team status`, until you clear it
 
 The summary is made from your latest prompt by a small Claude model, called through your own Claude login, the same way your prompts already reach Claude. The prompt itself is never sent to the team server. Your own row in the `/team` panel shows exactly what is shared about you; `/team say <text>` replaces the summary with your own words, and `/team pause` stops sharing.
