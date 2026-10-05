@@ -26,6 +26,9 @@ export class Team extends DurableObject {
     const cols = this.sql.exec('PRAGMA table_info(members)').toArray().map(r => String(r.name))
     if (!cols.includes('status')) this.sql.exec("ALTER TABLE members ADD COLUMN status TEXT NOT NULL DEFAULT ''")
     if (!cols.includes('status_at')) this.sql.exec('ALTER TABLE members ADD COLUMN status_at INTEGER NOT NULL DEFAULT 0')
+    // Segments recorded before active vs idle existed were all treated as working, so that is the default.
+    const segCols = this.sql.exec('PRAGMA table_info(segments)').toArray().map(r => String(r.name))
+    if (!segCols.includes('state')) this.sql.exec("ALTER TABLE segments ADD COLUMN state TEXT NOT NULL DEFAULT 'working'")
   }
 
   protected meta(k: string): string | null {
@@ -133,9 +136,13 @@ export class Team extends DurableObject {
       state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now
     )
 
-    const last = this.sql.exec('SELECT rowid AS rid, end_at FROM segments WHERE session = ? ORDER BY end_at DESC LIMIT 1', sid).toArray()[0]
-    if (last && now - Number(last.end_at) < Team.OFFLINE_AFTER_MS) this.sql.exec('UPDATE segments SET end_at = ? WHERE rowid = ?', now, last.rid)
-    else this.sql.exec('INSERT INTO segments (session, member, start_at, end_at) VALUES (?, ?, ?, ?)', sid, me.id, now, now)
+    // One continuous run per state: a state change inside the window closes the old run at its end and opens the next from there.
+    const last = this.sql.exec('SELECT rowid AS rid, end_at, state FROM segments WHERE session = ? ORDER BY end_at DESC LIMIT 1', sid).toArray()[0]
+    const insertSegment = (start: number) => this.sql.exec('INSERT INTO segments (session, member, start_at, end_at, state) VALUES (?, ?, ?, ?, ?)', sid, me.id, start, now, state)
+    if (last && now - Number(last.end_at) < Team.OFFLINE_AFTER_MS) {
+      if (String(last.state) === state) this.sql.exec('UPDATE segments SET end_at = ? WHERE rowid = ?', now, last.rid)
+      else insertSegment(Number(last.end_at))
+    } else insertSegment(now)
 
     this.prune(now)
     return ok({ ok: true })
@@ -157,7 +164,7 @@ export class Team extends DurableObject {
         now - Team.WINDOW_MS
       )
       .toArray()
-    const segments = this.sql.exec('SELECT session, member, start_at, end_at FROM segments WHERE end_at >= ? ORDER BY start_at', now - Team.WINDOW_MS).toArray()
+    const segments = this.sql.exec('SELECT session, member, start_at, end_at, state FROM segments WHERE end_at >= ? ORDER BY start_at', now - Team.WINDOW_MS).toArray()
     return ok({
       team: this.meta('team'),
       now,
@@ -171,7 +178,7 @@ export class Team extends DurableObject {
         state: String(s.state), stateSince: Number(s.state_since), fiveHour: s.five_hour === null ? null : Number(s.five_hour),
         week: s.week === null ? null : Number(s.week), startedAt: Number(s.started_at), seenAt: Number(s.seen_at)
       })),
-      segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at) }))
+      segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at), state: String(s.state) }))
     })
   }
 
