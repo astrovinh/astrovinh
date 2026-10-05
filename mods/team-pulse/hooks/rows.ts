@@ -52,7 +52,7 @@ export function buildRows(snap: Snapshot, elapsedMs: number): Row[] {
     const view = (s: SnapshotSession): SessionView => ({
       id: s.id,
       line: s.line,
-      where: [s.project, s.branch, duration(now - s.startedAt)].filter(Boolean).join(' \u00b7 ')
+      where: [s.branch, duration(now - s.startedAt)].filter(Boolean).join(' \u00b7 ')
     })
     const latest = mine[0]
     const statusText =

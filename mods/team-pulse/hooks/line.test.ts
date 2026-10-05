@@ -21,9 +21,9 @@ test('the reply is cleaned: first line, no quotes, no end punctuation, capped', 
   expect(cleanLine('y'.repeat(300))!.length).toBe(120)
 })
 
-test('without a line, project and branch stand in', () => {
-  expect(fallbackLine('mobile-app', 'fix/x')).toBe('mobile-app \u00b7 fix/x')
-  expect(fallbackLine('mobile-app', '')).toBe('mobile-app')
+test('without a line, the branch stands in, or nothing', () => {
+  expect(fallbackLine('fix/x')).toBe('fix/x')
+  expect(fallbackLine('')).toBe('')
 })
 
 test('curly quotes are stripped too', () => {

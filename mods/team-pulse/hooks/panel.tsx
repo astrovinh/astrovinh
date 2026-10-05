@@ -75,7 +75,11 @@ export function drawPanel(
                 </Text>
               </Box>
             ) : null}
-            {r.main ? <Text wrap="truncate">{r.main.line}</Text> : <Text dimColor>Not running Claude Code</Text>}
+            {r.main ? (
+              r.main.line ? <Text wrap="truncate">{r.main.line}</Text> : <Text dimColor>Working in Claude Code</Text>
+            ) : (
+              <Text dimColor>Not running Claude Code</Text>
+            )}
             {r.main ? <Text dimColor wrap="truncate">{r.main.where}</Text> : null}
             {surface === 'desktop' && Svg ? (
               <Box marginTop={1}>

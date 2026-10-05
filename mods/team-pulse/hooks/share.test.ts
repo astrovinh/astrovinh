@@ -18,8 +18,9 @@ test('a heartbeat carries exactly the allowed fields', () => {
   expect(keys).toEqual(['branch', 'fiveHour', 'line', 'project', 'session', 'startedAt', 'state', 'week'])
 })
 
-test('project is the folder name only, never the path', () => {
-  expect(buildHeartbeat(facts).project).toBe('mobile-app')
+test('the repo folder name is never shared: project is always empty', () => {
+  expect(buildHeartbeat(facts).project).toBe('')
+  expect(JSON.stringify(buildHeartbeat(facts)).includes('mobile-app')).toBe(false)
   expect(basename('/a/b/c')).toBe('c')
   expect(basename('c')).toBe('c')
 })
@@ -27,7 +28,7 @@ test('project is the folder name only, never the path', () => {
 test('every text field is capped and whitespace is collapsed', () => {
   const hb = buildHeartbeat({ ...facts, line: 'x'.repeat(500), branch: 'b'.repeat(500), session: 's'.repeat(99) })
   expect(hb.line.length).toBe(120)
-  expect(hb.line.endsWith('…')).toBe(true)
+  expect(hb.line.endsWith('\u2026')).toBe(true)
   expect(hb.branch.length).toBe(96)
   expect(hb.session.length).toBe(32)
   expect(cap('  a \n  b  ', 10)).toBe('a b')

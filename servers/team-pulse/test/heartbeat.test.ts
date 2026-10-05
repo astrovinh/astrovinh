@@ -18,6 +18,18 @@ describe('heartbeats and the snapshot', () => {
     expect(snap.body.sessions[0]).toMatchObject({ id: 'sessA', member: linh.memberId, line: 'Fixing restore', fiveHour: 64, seenAt: T0 })
   })
 
+  it('never stores the project folder name, even when a client sends one', async () => {
+    const { teamId, linh, admin } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb({ project: 'secret-repo' }) })
+    let snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 5_000 })
+    expect(snap.body.sessions[0].project).toBe('')
+    expect(JSON.stringify(snap.body).includes('secret-repo')).toBe(false)
+    // an update from an older client replaces nothing: the stored value stays empty
+    await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb({ project: 'secret-repo-2' }), now: T0 + 60_000 })
+    snap = await api('GET', `/teams/${teamId}`, { key: admin.key, now: T0 + 70_000 })
+    expect(snap.body.sessions[0].project).toBe('')
+  })
+
   it('turns away a missing or unknown key', async () => {
     const { teamId } = await newTeam()
     expect((await api('GET', `/teams/${teamId}`)).status).toBe(401)

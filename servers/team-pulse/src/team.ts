@@ -136,7 +136,8 @@ export class Team extends DurableObject {
        ON CONFLICT(id) DO UPDATE SET project = excluded.project, branch = excluded.branch, line = excluded.line,
          state = excluded.state, state_since = excluded.state_since, five_hour = excluded.five_hour, week = excluded.week,
          started_at = excluded.started_at, seen_at = excluded.seen_at`,
-      sid, me.id, text(body?.project, CAPS.project), text(body?.branch, CAPS.branch), text(body?.line, CAPS.line),
+      // The repo folder name is not shared any more: older clients may still send one, it is dropped here.
+      sid, me.id, '', text(body?.branch, CAPS.branch), text(body?.line, CAPS.line),
       state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now
     )
     // A new session shows on the next poll; an existing one waits for the shared view to rebuild, or every heartbeat would rebuild it.

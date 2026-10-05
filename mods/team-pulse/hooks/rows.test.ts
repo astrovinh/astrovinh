@@ -52,7 +52,7 @@ test('main session, others, where line and limits from the latest session', () =
     s({ id: '1', line: 'Older work', seenAt: NOW - 50_000, fiveHour: 5 }),
     s({ id: '2', line: 'Newest work', seenAt: NOW - 10_000, fiveHour: 64, week: 41, startedAt: NOW - 74 * 60_000, branch: 'feat/x' })
   ]), 0)
-  expect(rows[0]!.main).toEqual({ id: '2', line: 'Newest work', where: 'mobile-app \u00b7 feat/x \u00b7 1h 14m' })
+  expect(rows[0]!.main).toEqual({ id: '2', line: 'Newest work', where: 'feat/x \u00b7 1h 14m' })
   expect(rows[0]!.others.map(o => o.id)).toEqual(['1'])
   expect([rows[0]!.fiveHour, rows[0]!.week]).toEqual([64, 41])
   expect(rows[0]!.you).toBe(true)
@@ -97,4 +97,10 @@ test('away note ages use the server clock plus the time since the fetch, not Dat
   // Date.now() is nowhere near NOW (2027); only the server clock gives 3h, and 2h later it gives 5h.
   expect(byName(withNotes(0), r => r.noteAge).Ann).toBe('3h')
   expect(byName(withNotes(2 * 3_600_000), r => r.noteAge).Ann).toBe('5h')
+})
+
+test('an empty session line stays empty in the view', () => {
+  const rows = buildRows(snap([s({ line: '', branch: '' })]), 0)
+  expect(rows[0]!.main!.line).toBe('')
+  expect(rows[0]!.main!.where).toBe('1h 0m')
 })

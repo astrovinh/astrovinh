@@ -11,7 +11,7 @@ import { drawPanel } from './panel'
 import { paneStateOf, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
-import { basename, buildHeartbeat } from './share'
+import { buildHeartbeat } from './share'
 
 const snapshot = atom({ plugin: 'murror', key: 'snapshot' } as const, null as Snapshot | null)
 const fetchedAt = atom({ plugin: 'murror', key: 'fetchedAt' } as const, 0)
@@ -68,7 +68,7 @@ async function beat($: any) {
     session: sessionId,
     cwd,
     branch,
-    line: said || line || fallbackLine(basename(cwd), branch),
+    line: said || line || fallbackLine(branch),
     lastTurnAt,
     now,
     fiveHour: u?.rateLimits?.find((l: any) => l.kind === 'five_hour')?.percentUsed ?? null,

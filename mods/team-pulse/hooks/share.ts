@@ -20,7 +20,7 @@ export type SessionFacts = {
 /** Collapses whitespace and cuts to `n` characters, ending with an ellipsis when cut. */
 export function cap(s: string, n: number): string {
   const t = s.replace(/\s+/g, ' ').trim()
-  return t.length <= n ? t : `${t.slice(0, n - 1)}…`
+  return t.length <= n ? t : `${t.slice(0, n - 1)}\u2026`
 }
 
 /** The last folder of a path: the project name, never the path itself. */
@@ -34,7 +34,8 @@ const percent = (n: number | null | undefined) => (typeof n === 'number' && Numb
 export function buildHeartbeat(f: SessionFacts): Heartbeat {
   return {
     session: cap(f.session, LIMITS.session),
-    project: cap(basename(f.cwd), LIMITS.project),
+    // Kept so older servers accept the body; the folder name is never sent.
+    project: '',
     branch: cap(f.branch, LIMITS.branch),
     line: cap(f.line, LIMITS.line),
     state: f.now - f.lastTurnAt < IDLE_AFTER_MS ? 'working' : 'idle',

@@ -21,6 +21,7 @@ export function cleanLine(text: string): string | null {
   return bare && !/^none\b/i.test(bare) ? cap(bare, LIMITS.line) : null
 }
 
-export function fallbackLine(project: string, branch: string): string {
-  return branch ? `${project} \u00b7 ${branch}` : project
+/** With no written line yet, the branch stands in; with no branch either, nothing (the panel says "Working in Claude Code"). */
+export function fallbackLine(branch: string): string {
+  return branch || ''
 }
