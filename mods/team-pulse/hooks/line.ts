@@ -4,7 +4,8 @@ import { LINE_EVERY_MS } from './config'
 import { cap, LIMITS } from './share'
 
 const SYSTEM =
-  'Summarize what this developer is working on in 4 to 8 plain words, sentence case, no ending punctuation, no quotes. ' +
+  'Summarize what this person is working on in 4 to 8 plain words, sentence case, no ending punctuation, no quotes. ' +
+  'Accept any kind of work: writing, design, research, planning, ops or code. ' +
   'Never include names, secrets, file contents or code. If the message does not describe any work (a greeting, a test message, a question about you, or too little to tell), reply with exactly NONE. Reply with the summary or NONE only.'
 
 export function lineDue(lastAt: number | null, now: number): boolean {

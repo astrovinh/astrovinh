@@ -69,7 +69,7 @@ const BG = ['#2c3a55', '#2f4a3f', '#4a3a2c', '#4a2f42', '#363252', '#2f4448', '#
 
 // The panel color, used as the ring around the status dot so it reads as cut out of the picture.
 const PANEL = '#20201f'
-const DOT: Record<Status, string> = { live: '#4cc38a', idle: '#e0a84a', offline: '#5f5e58' }
+const DOT: Record<Status, string> = { live: '#8CC9A1', idle: '#D6BA7B', offline: '#7B776C' }
 
 function draw(seed: string) {
   const r = rng(hash(seed))

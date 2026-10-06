@@ -35,6 +35,7 @@ export class Team extends DurableObject {
     const cols = this.sql.exec('PRAGMA table_info(members)').toArray().map(r => String(r.name))
     if (!cols.includes('status')) this.sql.exec("ALTER TABLE members ADD COLUMN status TEXT NOT NULL DEFAULT ''")
     if (!cols.includes('status_at')) this.sql.exec('ALTER TABLE members ADD COLUMN status_at INTEGER NOT NULL DEFAULT 0')
+    if (!cols.includes('tz')) this.sql.exec("ALTER TABLE members ADD COLUMN tz TEXT NOT NULL DEFAULT ''")
     // Segments recorded before active vs idle existed were all treated as working, so that is the default.
     const segCols = this.sql.exec('PRAGMA table_info(segments)').toArray().map(r => String(r.name))
     if (!segCols.includes('state')) this.sql.exec("ALTER TABLE segments ADD COLUMN state TEXT NOT NULL DEFAULT 'working'")
@@ -190,7 +191,7 @@ export class Team extends DurableObject {
   }
 
   protected readView(now: number): Record<string, unknown> {
-    const members =this.sql.exec('SELECT id, name, status, status_at FROM members ORDER BY joined_at, rowid').toArray()
+    const members = this.sql.exec('SELECT id, name, status, status_at, tz FROM members ORDER BY joined_at, rowid').toArray()
     // Sessions seen in the last 12 hours, plus each member's most recent one of any age ("seen 2d ago").
     const sessions = this.sql
       .exec(
@@ -208,7 +209,8 @@ export class Team extends DurableObject {
       now,
       members: members.map(m => ({
         id: String(m.id), name: String(m.name),
-        status: String(m.status) || null, statusAt: String(m.status) ? Number(m.status_at) : null
+        status: String(m.status) || null, statusAt: String(m.status) ? Number(m.status_at) : null,
+        tz: String(m.tz) || null
       })),
       sessions: sessions.map(s => ({
         id: String(s.id), member: String(s.member), project: '', branch: String(s.branch), line: String(s.line),
@@ -229,6 +231,26 @@ export class Team extends DurableObject {
     else this.sql.exec("UPDATE members SET status = '', status_at = 0 WHERE id = ?", me.id)
     this.view = null
     return ok({ ok: true, status: status || null })
+  }
+
+  /** Shares the caller's time zone only when they opt in; an empty string hides it. */
+  async setClock(key: string, body: any, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (this.limited(`ck:${me.id}`, 6, now)) return fail(429, 'Too many clock changes. Wait a minute.')
+    const tz = body?.tz
+    const invalid = () => fail(400, 'That is not a time zone. Use a name like Asia/Ho_Chi_Minh or America/Los_Angeles.')
+    if (typeof tz !== 'string' || tz.length > 64 || (tz !== '' && !/^[A-Za-z0-9_+\-/]+$/.test(tz))) return invalid()
+    if (tz) {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: tz })
+      } catch {
+        return invalid()
+      }
+    }
+    this.sql.exec('UPDATE members SET tz = ? WHERE id = ?', tz, me.id)
+    this.view = null
+    return ok({ ok: true, tz: tz || null })
   }
 
   /** Renames the caller. Name keys stay unique across the team; the unique index backs up the check against a race. */

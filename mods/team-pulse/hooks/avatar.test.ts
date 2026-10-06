@@ -28,16 +28,16 @@ test('the alt text names the species and never a person', () => {
 })
 
 test('the status dot color follows the status', () => {
-  expect(avatarSvg('m1', 30, 'live').source.includes('fill="#4cc38a"')).toBe(true)
-  expect(avatarSvg('m1', 30, 'idle').source.includes('fill="#e0a84a"')).toBe(true)
-  expect(avatarSvg('m1', 30, 'offline').source.includes('fill="#5f5e58"')).toBe(true)
-  expect(avatarSvg('m1', 30, 'live').source.includes('fill="#e0a84a"')).toBe(false)
-  expect(avatarSvg('m1', 30, 'offline').source.includes('fill="#4cc38a"')).toBe(false)
+  expect(avatarSvg('m1', 30, 'live').source.includes('fill="#8CC9A1"')).toBe(true)
+  expect(avatarSvg('m1', 30, 'idle').source.includes('fill="#D6BA7B"')).toBe(true)
+  expect(avatarSvg('m1', 30, 'offline').source.includes('fill="#7B776C"')).toBe(true)
+  expect(avatarSvg('m1', 30, 'live').source.includes('fill="#D6BA7B"')).toBe(false)
+  expect(avatarSvg('m1', 30, 'offline').source.includes('fill="#8CC9A1"')).toBe(false)
 })
 
 test('the dot has a panel-colored ring and sits in the bottom-right corner', () => {
   const s = avatarSvg('m1', 30, 'live').source
-  const circles = [...s.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)" fill="(#[0-9a-f]{6})"/g)]
+  const circles = [...s.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)" fill="(#[0-9a-fA-F]{6})"/g)]
   expect(circles.length).toBe(2)
   const [ring, dot] = circles
   expect(ring![4]).toBe('#20201f')

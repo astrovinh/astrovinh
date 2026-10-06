@@ -4,6 +4,7 @@ import type { Register } from 'claude-code'
 import type { Membership, Snapshot } from '../types'
 import { backoffMs, parseJoinCode, requestOf, resultOf, UNREACHABLE } from './client'
 import type { CallResult } from './client'
+import { clockLabel } from './clock'
 import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from './config'
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
 import { cleanName } from './names'
@@ -248,6 +249,26 @@ async function runCommand($: any, args: string): Promise<string> {
       await refresh($)
       return text ? `Your status is set: "${r.data.status ?? text}". /team status alone clears it.` : 'Status cleared.'
     }
+    case 'clock': {
+      if (!m) return NOT_IN_TEAM
+      const choice = rest.join(' ')
+      const usage = "Use /team clock on to share this Mac's time zone, /team clock <IANA> to share another, or /team clock off to hide it."
+      if (!choice) {
+        await refresh($)
+        const snap = await read($, snapshot)
+        const tz = snap?.members.find(x => x.id === m.memberId)?.tz
+        return `${tz ? `Your clock uses ${tz}.` : 'Your local clock is hidden.'} ${usage}`
+      }
+      const tz = choice === 'off' ? '' : choice === 'on' ? Intl.DateTimeFormat().resolvedOptions().timeZone : choice
+      const r = await call<{ ok: boolean; tz: string | null }>($, m.server, { method: 'PUT', path: `/teams/${m.teamId}/clock`, key: m.key, body: { tz } })
+      if (!r.ok) return r.message
+      await refresh($)
+      const snap = await read($, snapshot)
+      const at = await read($, fetchedAt)
+      const now = snap ? snap.now + Math.max(0, Date.now() - at) : await $.clock.now()
+      const label = clockLabel(r.data.tz, now)
+      return label ? `Your local time now shows as ${label}. /team clock off hides it.` : 'Your local clock is hidden.'
+    }
     case 'name': {
       if (!m) return NOT_IN_TEAM
       const name = cleanName(rest.join(' '))
@@ -281,7 +302,7 @@ async function runCommand($: any, args: string): Promise<string> {
       await $.store.set('server', rest[0])
       return `Team server set to ${rest[0]} for new teams. Run /team join or /team create to use it.`
     default:
-      return 'Commands: /team, create, join, leave, pause, resume, say, status, name, code, remove, server.'
+      return 'Commands: /team, create, join, leave, pause, resume, say, status, clock, name, code, remove, server.'
   }
 }
 

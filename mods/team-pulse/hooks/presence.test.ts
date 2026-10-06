@@ -7,7 +7,7 @@ const live = (letter: string) => String.fromCodePoint(0x1f150 + letter.charCodeA
 const idle = (letter: string) => String.fromCodePoint(0x24b6 + letter.charCodeAt(0) - 65)
 const DOT = '\u00b7'
 const row = (name: string, status: Status = 'live', you = false): Row => ({
-  id: name.toLowerCase(), name, you, status, statusText: '', note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
+  id: name.toLowerCase(), name, you, status, statusText: '', clock: null, note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
 })
 const base = { rows: [] as Row[], paused: false, problem: null as string | null, hasSnapshot: true }
 

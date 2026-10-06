@@ -2,7 +2,7 @@
 
 import type { Snapshot } from '../types'
 import { avatarSvg } from './avatar'
-import { bubbleSvg, ROW_SVG_H, ROW_SVG_W, rowSvg, textBar } from './draw'
+import { bubbleSvg, ROW_SVG_H, ROW_SVG_W, rowSvg, STRIP_SVG_H, STRIP_SVG_W, stripSvg, textBar, textStrip } from './draw'
 import type { Row } from './rows'
 import { ago, otherLine, withYouLine } from './rows'
 import { cap } from './share'
@@ -10,7 +10,8 @@ import { strip } from './strip'
 
 const BUBBLE = '#34332e'
 const BUBBLE_TEXT = '#ecebe6'
-const DOT = { live: '#4cc38a', idle: '#e0a84a', offline: '#5f5e58' } as const
+const DOT = { live: '#8CC9A1', idle: '#D6BA7B', offline: '#7B776C' } as const
+const QUIET = '#AAA69A'
 
 export function drawPanel(
   ui: any,
@@ -35,17 +36,13 @@ export function drawPanel(
   }
 
   const snap = v.snapshot
-  const live = v.rows.filter(r => r.status === 'live').length
   const now = snap.now + v.fetchedAgoMs
 
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" paddingX={2} paddingY={1}>
-        <Box justifyContent="space-between">
-          <Text bold>{snap.team}</Text>
-          <Text dimColor>{`${live} live \u00b7 ${v.rows.length}`}</Text>
-        </Box>
-        <Text dimColor wrap="truncate">{withYouLine(v.rows)}</Text>
+        <Text bold>{snap.team}</Text>
+        <Text dimColor color={QUIET} wrap="truncate">{withYouLine(v.rows)}</Text>
       </Box>
       {v.problem ? (
         <Box paddingX={2}>
@@ -71,7 +68,7 @@ export function drawPanel(
                   <Text bold>{r.name}</Text>
                 </Text>
               )}
-              <Text dimColor>{r.statusText}</Text>
+              <Text dimColor color={QUIET}>{r.clock ?? r.statusText}</Text>
             </Box>
             {r.note && surface === 'desktop' && Svg ? (
               <Box marginBottom={1}>
@@ -93,18 +90,26 @@ export function drawPanel(
             ) : (
               <Text dimColor>Not running Claude Code</Text>
             )}
-            {r.main ? <Text dimColor wrap="truncate">{r.main.where}</Text> : null}
-            {surface === 'desktop' && Svg ? (
-              <Box marginTop={1}>
-                <Svg {...rowSvg({ fiveHour: r.fiveHour, week: r.week, pieces: st.pieces, hours: st.hours, name: r.name })} width={ROW_SVG_W} height={ROW_SVG_H} />
+            <Box alignItems="center" marginTop={1}>
+              {surface === 'desktop' && Svg ? (
+                <Svg {...stripSvg(st.pieces)} width={STRIP_SVG_W} height={STRIP_SVG_H} />
+              ) : (
+                <Text dimColor color={QUIET}>{`12h ${textStrip(st.pieces, 20)} `}</Text>
+              )}
+              <Button key={`expand:${r.id}`} plain onPress={() => v.onExpand(r.id)} label={open ? 'Less' : 'More'} />
+            </Box>
+            {open ? (
+              <Box flexDirection="column">
+                {r.main ? <Text dimColor color={QUIET} wrap="truncate">{`${r.main.where}${r.others.length ? ` \u00b7 ${r.others.length + 1} sessions` : ''}`}</Text> : null}
+                {surface === 'desktop' && Svg ? (
+                  <Svg {...rowSvg({ fiveHour: r.fiveHour, week: r.week, name: r.name })} width={ROW_SVG_W} height={ROW_SVG_H} />
+                ) : (
+                  <Text dimColor color={QUIET}>{`5h ${textBar(r.fiveHour, 8)} ${r.fiveHour ?? '\u2013'}%  Week ${textBar(r.week, 8)} ${r.week ?? '\u2013'}%`}</Text>
+                )}
+                <Text dimColor color={QUIET}>{`Claude activity ${st.hours.toFixed(1)}h in the last 12 hours`}</Text>
+                {r.others.map(o => <Text key={`s:${o.id}`} dimColor color={QUIET} wrap="truncate">{otherLine(o)}</Text>)}
               </Box>
-            ) : (
-              <Text dimColor>{`5h ${textBar(r.fiveHour, 8)} ${r.fiveHour ?? '\u2013'}%  Week ${textBar(r.week, 8)} ${r.week ?? '\u2013'}%  12h ${st.hours.toFixed(1)}h`}</Text>
-            )}
-            {r.others.length ? (
-              <Button key={`expand:${r.id}`} plain onPress={() => v.onExpand(r.id)} label={open ? 'Hide other sessions' : `+${r.others.length} more session${r.others.length === 1 ? '' : 's'}`} />
             ) : null}
-            {open ? r.others.map(o => <Text key={`s:${o.id}`} dimColor wrap="truncate">{otherLine(o)}</Text>) : null}
           </Box>
         )
       })}

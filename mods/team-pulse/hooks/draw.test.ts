@@ -1,25 +1,26 @@
+import type { Piece } from './strip'
 import { test, expect } from 'claude-code/testing'
-import { bubbleSvg, esc, noteWidth, rowSvg, ROW_SVG_W, severity, textBar } from './draw'
-
+import { bubbleSvg, esc, noteWidth, rowSvg, ROW_SVG_W, severity, stripSvg, textBar, textStrip } from './draw'
 test('severity matches usage-bars: green, amber from 60, red from 85', () => {
   expect([severity(10), severity(60), severity(85)]).toEqual(['#9ece6a', '#e0af68', '#f7768e'])
 })
 
-test('a row draws two bars and a strip at a fixed width', () => {
-  const { source, alt } = rowSvg({ fiveHour: 64, week: 41, pieces: [{ from: 0.5, to: 0.75, running: true, active: true }], hours: 3, name: 'Linh' })
+test('opened usage draws only two bars at a fixed width', () => {
+  const { source, alt } = rowSvg({ fiveHour: 64, week: 41, name: 'Linh' })
   expect(source.includes(`width="${ROW_SVG_W}"`)).toBe(true)
-  expect(source.includes('>64%<') && source.includes('>41%<') && source.includes('>3.0h<')).toBe(true)
-  expect(alt).toBe('Linh: 5-hour 64%, week 41%, 3.0 hours in the last 12 hours')
+  expect(source.includes('>64%<') && source.includes('>41%<')).toBe(true)
+  expect(source.includes('12h')).toBe(false)
+  expect(alt).toBe('Linh: 5-hour 64%, week 41%')
 })
 
 test('missing limits draw a dash, never a bar', () => {
-  const { source } = rowSvg({ fiveHour: null, week: null, pieces: [], hours: 0, name: 'Hoa' })
+  const { source } = rowSvg({ fiveHour: null, week: null, name: 'Hoa' })
   expect(source.split('>\u2013<').length - 1).toBe(2)
 })
 
 test('names and lines are escaped', () => {
   expect(esc('<b>&"x"')).toBe('&lt;b&gt;&amp;&quot;x&quot;')
-  const { source } = rowSvg({ fiveHour: 1, week: 1, pieces: [], hours: 0, name: '<script>' })
+  const { source } = rowSvg({ fiveHour: 1, week: 1, name: '<script>' })
   expect(source.includes('<script>')).toBe(false)
 })
 
@@ -58,7 +59,7 @@ test('a 200-character note wraps to several lines, fills the width and grows the
   expect(lines.length).toBeGreaterThanOrEqual(3)
   expect(lines.length).toBeLessThanOrEqual(5)
   expect(b.width).toBe(290)
-  const ageLine = /<tspan x="10" y="[\d.]+" fill="#8b8b8b"/.test(b.source) ? 1 : 0
+  const ageLine = /<tspan x="10" y="[\d.]+" fill="#AAA69A"/.test(b.source) ? 1 : 0
   expect(b.height).toBe(heightOf(lines.length + ageLine))
   for (const l of lines) expect(noteWidth(l) <= 270).toBe(true)
   expect(b.height > bubbleSvg('hi', '3h', 290).height).toBe(true)
@@ -94,7 +95,7 @@ test('the age goes on its own extra line when the last line has no room for it',
   expect(noteWidth(lines[1]! + ' \u00b7 3h') > 270).toBe(true)
   expect(b.height).toBe(heightOf(3))
   // the age line is drawn below the note lines, without the leading separator
-  expect(/<tspan x="10" y="[\d.]+" fill="#8b8b8b">3h<\/tspan>/.test(b.source)).toBe(true)
+  expect(/<tspan x="10" y="[\d.]+" fill="#AAA69A">3h<\/tspan>/.test(b.source)).toBe(true)
   expect(b.source.includes('\u00b7')).toBe(false)
 })
 
@@ -147,11 +148,26 @@ test('noteWidth counts accented letters wider than plain ones', () => {
 })
 
 test('the strip draws active pieces blue and idle pieces yellow, brighter while running', () => {
-  const draw = (pieces: { from: number; to: number; running: boolean; active: boolean }[]) => rowSvg({ fiveHour: null, week: null, pieces, hours: 0, name: 'Linh' }).source
-  expect(draw([{ from: 0.1, to: 0.2, running: false, active: true }]).includes('fill="rgba(122,162,247,0.55)"')).toBe(true)
-  expect(draw([{ from: 0.1, to: 0.2, running: true, active: true }]).includes('fill="#7aa2f7"')).toBe(true)
+  const draw = (pieces: Piece[]) => stripSvg(pieces).source
+  expect(draw([{ from: 0.1, to: 0.2, running: false, active: true }]).includes('fill="rgba(148,183,232,0.55)"')).toBe(true)
+  expect(draw([{ from: 0.1, to: 0.2, running: true, active: true }]).includes('fill="#94B7E8"')).toBe(true)
   const idle = draw([{ from: 0.1, to: 0.2, running: false, active: false }])
-  expect(idle.includes('fill="rgba(224,175,104,0.45)"')).toBe(true)
-  expect(idle.includes('rgba(122,162,247,0.55)')).toBe(false)
-  expect(draw([{ from: 0.1, to: 0.2, running: true, active: false }]).includes('fill="#e0af68"')).toBe(true)
+  expect(idle.includes('fill="rgba(214,186,123,0.55)"')).toBe(true)
+  expect(idle.includes('rgba(148,183,232,0.55)')).toBe(false)
+  expect(draw([{ from: 0.1, to: 0.2, running: true, active: false }]).includes('fill="#D6BA7B"')).toBe(true)
+})
+
+test('the compact strip has a 12h label without usage bars or an hours number', () => {
+  const { source, alt } = stripSvg([])
+  expect(source.includes('>12h<')).toBe(true)
+  expect(source.includes('5h') || source.includes('Week') || source.includes('0.0h')).toBe(false)
+  expect(source.includes('fill="#AAA69A"')).toBe(true)
+  expect(alt).toBe('Claude activity in the last 12 hours')
+})
+
+test('the terminal strip keeps active, idle and quiet time in order', () => {
+  expect(textStrip([
+    { from: 0.25, to: 0.5, active: true, running: false },
+    { from: 0.5, to: 0.75, active: false, running: true }
+  ], 4)).toBe('\u2500\u2501\u2504\u2500')
 })

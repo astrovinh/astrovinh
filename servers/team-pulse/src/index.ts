@@ -64,6 +64,8 @@ export default {
       }
       case 'PUT status':
         return json(await t.setStatus(key, body, now))
+      case 'PUT clock':
+        return json(await t.setClock(key, body, now))
       case 'PUT name':
         return json(await t.rename(key, body, now))
       case 'GET ':

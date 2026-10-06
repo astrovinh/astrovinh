@@ -47,3 +47,11 @@ test('NONE means there was nothing to summarize, so no line', () => {
 test('the request lets the model say there is nothing to summarize', () => {
   expect(lineRequest('hi').system.includes('reply with exactly NONE')).toBe(true)
 })
+
+test('the system describes a person doing any kind of work and keeps NONE', () => {
+  const system = lineRequest('Planning the next research study').system
+  expect(system.includes('developer')).toBe(false)
+  expect(system.includes('this person')).toBe(true)
+  for (const kind of ['writing', 'design', 'research', 'planning', 'ops', 'code']) expect(system.includes(kind)).toBe(true)
+  expect(system.includes('NONE')).toBe(true)
+})

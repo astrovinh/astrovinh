@@ -45,6 +45,10 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 | `/team name <new name>` | Changes the name your teammates see. |
 | `/team status <note>` | Sets an away note that shows under your name. It stays until you clear it. |
 | `/team status` | Clears your away note. |
+| `/team clock` | Shows your current clock setting and how to change it. |
+| `/team clock on` | Shares this Mac's time zone so teammates see your local time. |
+| `/team clock off` | Hides your local clock. |
+| `/team clock <IANA>` | Shares a named time zone, for example `Asia/Ho_Chi_Minh` or `America/Los_Angeles`. |
 | `/team say <text>` | Writes your own "working on" line. |
 | `/team say` | Goes back to the automatic line. |
 | `/team pause` | Stops sharing from this Mac. |
@@ -60,6 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 - How many Claude Code sessions you have open, and how long each has been open.
 - When you were active or idle in the last 12 hours (active means you sent a request or Claude was working on it).
 - Your away note, if you set one.
+- Your time zone, only if you turn it on.
 
 This is sent every 60 seconds while a session is open. Your own row in `/team` shows exactly what is shared about you.
 

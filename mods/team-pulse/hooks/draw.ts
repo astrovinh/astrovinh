@@ -3,16 +3,18 @@
 import type { Piece } from './strip'
 
 export const ROW_SVG_W = 300
-export const ROW_SVG_H = 46
+export const ROW_SVG_H = 30
+export const STRIP_SVG_W = 264
+export const STRIP_SVG_H = 16
 const LABEL_W = 40
 const VALUE_W = 36
 const BAR_W = ROW_SVG_W - LABEL_W - VALUE_W
-const INK = '#8b8b8b'
+const INK = '#AAA69A'
 const TRACK = 'rgba(139,139,139,0.22)'
-const STRIP = 'rgba(122,162,247,0.55)'
-const STRIP_NOW = '#7aa2f7'
-const IDLE = 'rgba(224,175,104,0.45)'
-const IDLE_NOW = '#e0af68'
+const STRIP = 'rgba(148,183,232,0.55)'
+const STRIP_NOW = '#94B7E8'
+const IDLE = 'rgba(214,186,123,0.55)'
+const IDLE_NOW = '#D6BA7B'
 
 export function esc(s: string): string {
   return s.replace(/[&<>"]/g, c => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'))
@@ -47,17 +49,33 @@ function stripTrack(pieces: Piece[]): string {
   )
 }
 
-export function rowSvg(r: { fiveHour: number | null; week: number | null; pieces: Piece[]; hours: number; name: string }): { source: string; alt: string } {
+export function stripSvg(pieces: Piece[]): { source: string; alt: string } {
+  const source =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${STRIP_SVG_W}" height="${STRIP_SVG_H}" viewBox="0 0 ${STRIP_SVG_W} ${STRIP_SVG_H}" ` +
+    `font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="10">` +
+    `<text x="0" y="11" fill="${INK}">12h</text>` +
+    `<g transform="translate(${LABEL_W} 6)">${stripTrack(pieces)}</g></svg>`
+  return { source, alt: 'Claude activity in the last 12 hours' }
+}
+
+export function rowSvg(r: { fiveHour: number | null; week: number | null; name: string }): { source: string; alt: string } {
   const pct = (p: number | null) => (p === null ? '\u2013' : `${Math.round(p)}%`)
   const source =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${ROW_SVG_W}" height="${ROW_SVG_H}" viewBox="0 0 ${ROW_SVG_W} ${ROW_SVG_H}" ` +
     `font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="10" style="font-variant-numeric:tabular-nums">` +
     line(7, '5h', bar(r.fiveHour), pct(r.fiveHour)) +
     line(22, 'Week', bar(r.week), pct(r.week)) +
-    line(38, '12h', stripTrack(r.pieces), `${r.hours.toFixed(1)}h`) +
     `</svg>`
-  const alt = `${esc(r.name)}: 5-hour ${pct(r.fiveHour)}, week ${pct(r.week)}, ${r.hours.toFixed(1)} hours in the last 12 hours`
+  const alt = `${esc(r.name)}: 5-hour ${pct(r.fiveHour)}, week ${pct(r.week)}`
   return { source, alt }
+}
+
+export function textStrip(pieces: Piece[], cells: number): string {
+  return Array.from({ length: cells }, (_, i) => {
+    const at = (i + 0.5) / cells
+    const piece = pieces.find(p => p.from <= at && p.to > at)
+    return piece ? (piece.active ? '\u2501' : '\u2504') : '\u2500'
+  }).join('')
 }
 
 export function textBar(p: number | null, cells: number): string {

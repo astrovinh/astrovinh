@@ -26,18 +26,29 @@ test('rows use the server clock, not the viewer clock', () => {
   expect(buildRows(snap([s({ seenAt: NOW - 120_000 })]), 40_000)[0]!.status).toBe('offline')
 })
 
-test('live first by session count, then idle, then offline by last seen', () => {
+test('row clocks use the server clock plus time since the fetch', () => {
+  const instant = Date.UTC(2026, 9, 6, 15, 40)
+  const members = [{ id: 'm1', name: 'Linh', tz: 'Asia/Ho_Chi_Minh' }, { id: 'm2', name: 'Hoa' }, { id: 'm3', name: 'Mai', tz: null }]
+  const view = { ...snap([], members), now: instant }
+  const labels = (elapsed: number) => buildRows(view, elapsed).map(r => r.clock)
+  expect(labels(0)).toEqual(['VN 10:40 PM', null, null])
+  expect(labels(60_000)).toEqual(['VN 10:41 PM', null, null])
+})
+
+test('you first, then server member order even when a later member is live', () => {
   const members = [{ id: 'a', name: 'Ann' }, { id: 'b', name: 'Bo' }, { id: 'c', name: 'Cy' }, { id: 'd', name: 'Di' }]
-  const rows = buildRows(snap([
+  const view = snap([
     s({ id: '1', member: 'a', seenAt: NOW - 200_000 }),
     s({ id: '2', member: 'b', state: 'idle' }),
     s({ id: '3', member: 'c' }), s({ id: '4', member: 'c' }),
     s({ id: '5', member: 'd' })
-  ], members), 0)
-  expect(rows.map(r => r.name)).toEqual(['Cy', 'Di', 'Bo', 'Ann'])
+  ], members)
+  const rows = buildRows({ ...view, you: 'b' }, 0)
+  expect(rows.map(r => r.name)).toEqual(['Bo', 'Ann', 'Cy', 'Di'])
+  expect(buildRows({ ...view, you: 'b' }, 200_000).map(r => r.name)).toEqual(['Bo', 'Ann', 'Cy', 'Di'])
 })
 
-test('status text says sessions, idle time counted from the last turn, or last seen', () => {
+test('status text has no session count, retaining idle time and last seen', () => {
   const members = [{ id: 'a', name: 'Ann' }, { id: 'b', name: 'Bo' }, { id: 'c', name: 'Cy' }, { id: 'e', name: 'Ed' }]
   const rows = buildRows(snap([
     s({ id: '1', member: 'a', seenAt: NOW - 3 * 3_600_000 }),
@@ -45,7 +56,8 @@ test('status text says sessions, idle time counted from the last turn, or last s
     s({ id: '3', member: 'c' }), s({ id: '4', member: 'c' })
   ], members), 0)
   const text = Object.fromEntries(rows.map(r => [r.name, r.statusText]))
-  expect(text).toEqual({ Cy: '2 sessions', Bo: 'idle 22m', Ann: 'seen 3h ago', Ed: 'not active yet' })
+  expect(text).toEqual({ Cy: '', Bo: 'idle 22m', Ann: 'seen 3h ago', Ed: 'not active yet' })
+  expect(rows.some(r => r.statusText.includes('session'))).toBe(false)
 })
 
 test('main session, others, where line and limits from the latest session', () => {
@@ -107,7 +119,7 @@ test('an empty session line stays empty in the view', () => {
 })
 
 const mate = (name: string, status: Status = 'live', you = false): Row => ({
-  id: name.toLowerCase(), name, you, status, statusText: '', note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
+  id: name.toLowerCase(), name, you, status, statusText: '', clock: null, note: null, noteAge: null, main: null, others: [], fiveHour: null, week: null
 })
 
 test('with-you line: nobody else working', () => {
