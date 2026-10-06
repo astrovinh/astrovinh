@@ -47,8 +47,8 @@ export function buildRows(snap: Snapshot, elapsedMs: number): Row[] {
     const mine = snap.sessions.filter(s => s.member === m.id).sort((a, b) => b.seenAt - a.seenAt)
     const active = mine
       .filter(s => sessionStatus(s, now) !== 'offline')
-      .sort((a, b) => Number(b.state === 'working') - Number(a.state === 'working') || b.seenAt - a.seenAt)
-    const status: Status = active.length ? sessionStatus(active[0]!, now) : 'offline'
+      .sort((a, b) => (b.turnAt || b.seenAt) - (a.turnAt || a.seenAt) || b.seenAt - a.seenAt)
+    const status: Status = active.some(s => s.state === 'working') ? 'live' : active.length ? 'idle' : 'offline'
     const view = (s: SnapshotSession): SessionView => ({
       id: s.id,
       line: s.line,

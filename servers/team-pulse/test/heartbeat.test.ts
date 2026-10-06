@@ -8,6 +8,50 @@ const hb = (o: Record<string, unknown> = {}) => ({
 })
 
 describe('heartbeats and the snapshot', () => {
+  it('shares finite activity time clamped to the server clock and defaults other input to zero', async () => {
+    const { teamId, linh } = await newTeam()
+    const values = [T0 - 60_000, T0 + 60_000, undefined, null, 'recent']
+    for (let i = 0; i < values.length; i++) {
+      expect((await api('PUT', `/teams/${teamId}/sessions/activity${i}`, { key: linh.key, body: hb({ turnAt: values[i] }) })).status).toBe(200)
+    }
+    const snap = await api('GET', `/teams/${teamId}`, { key: linh.key })
+    const times = Object.fromEntries(snap.body.sessions.map((s: any) => [s.id, s.turnAt]))
+    expect(times).toEqual({ activity0: T0 - 60_000, activity1: T0, activity2: 0, activity3: 0, activity4: 0 })
+    const ns = (env as any).TEAM as DurableObjectNamespace
+    await (runInDurableObject as any)(ns.get(ns.idFromName(teamId)), async (instance: any) => {
+      for (const [i, turnAt] of [Number.NaN, Number.POSITIVE_INFINITY].entries()) {
+        expect((await instance.heartbeat(linh.key, `nonfinite${i}`, hb({ turnAt }), T0)).status).toBe(200)
+      }
+      const view = await instance.snapshot(linh.key, T0 + 30_000)
+      expect(view.body.sessions.filter((s: any) => s.id.startsWith('nonfinite')).map((s: any) => s.turnAt)).toEqual([0, 0])
+    })
+  })
+
+  it('activity updates on an existing session wait for the cached view to rebuild', async () => {
+    const { teamId, linh } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/activity`, { key: linh.key, body: hb({ turnAt: T0 }) })
+    expect((await api('GET', `/teams/${teamId}`, { key: linh.key, now: T0 + 1_000 })).body.sessions[0].turnAt).toBe(T0)
+    await api('PUT', `/teams/${teamId}/sessions/activity`, { key: linh.key, body: hb({ turnAt: T0 + 2_000 }), now: T0 + 2_000 })
+    expect((await api('GET', `/teams/${teamId}`, { key: linh.key, now: T0 + 3_000 })).body.sessions[0].turnAt).toBe(T0)
+    expect((await api('GET', `/teams/${teamId}`, { key: linh.key, now: T0 + 31_000 })).body.sessions[0].turnAt).toBe(T0 + 2_000)
+  })
+
+  it('construction adds activity time to sessions stored by older clients', async () => {
+    const { teamId, linh } = await newTeam()
+    await api('PUT', `/teams/${teamId}/sessions/legacy`, { key: linh.key, body: hb() })
+    const ns = (env as any).TEAM as DurableObjectNamespace
+    const result = await (runInDurableObject as any)(ns.get(ns.idFromName(teamId)), (instance: any, state: any) => {
+      const sql = state.storage.sql
+      const cols = sql.exec('PRAGMA table_info(sessions)').toArray().map((r: any) => r.name)
+      if (cols.includes('turn_at')) sql.exec('ALTER TABLE sessions DROP COLUMN turn_at')
+      new (instance.constructor as any)(state, env)
+      const column = sql.exec('PRAGMA table_info(sessions)').toArray().find((r: any) => r.name === 'turn_at')
+      return { column: column ?? null, rows: column ? sql.exec('SELECT turn_at FROM sessions').toArray() : [] }
+    })
+    expect(result.column).toMatchObject({ notnull: 1, dflt_value: '0' })
+    expect(result.rows).toEqual([{ turn_at: 0 }])
+  })
+
   it('stores a heartbeat and returns it in the snapshot with the server clock', async () => {
     const { teamId, linh, admin } = await newTeam()
     expect((await api('PUT', `/teams/${teamId}/sessions/sessA`, { key: linh.key, body: hb() })).status).toBe(200)

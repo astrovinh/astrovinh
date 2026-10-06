@@ -7,6 +7,7 @@ export type Heartbeat = {
   fiveHour: number | null
   week: number | null
   startedAt: number
+  turnAt: number
 }
 
 export type SnapshotSession = {
@@ -21,6 +22,7 @@ export type SnapshotSession = {
   week: number | null
   startedAt: number
   seenAt: number
+  turnAt?: number
 }
 
 // state is missing on an older server, which counted every segment as active.

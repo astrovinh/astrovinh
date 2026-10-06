@@ -77,6 +77,37 @@ test('an offline person has no main session', () => {
   expect(rows[0]!.others).toEqual([])
 })
 
+test('a person stays live while their work line follows the newest activity on any Mac', () => {
+  const row = buildRows(snap([
+    s({ id: 'liveMac', state: 'working', line: 'Earlier activity', turnAt: NOW - 60_000, seenAt: NOW - 1_000 }),
+    s({ id: 'idleMac', state: 'idle', line: 'Most recent activity', turnAt: NOW - 10_000, seenAt: NOW - 20_000 })
+  ]), 0)[0]!
+  expect(row.status).toBe('live')
+  expect(row.statusText).toBe('')
+  expect(row.main!.id).toBe('idleMac')
+  expect(row.main!.line).toBe('Most recent activity')
+  expect(row.others.map(s => s.id)).toEqual(['liveMac'])
+})
+
+test('main session activity falls back to seen time for older clients', () => {
+  for (const turnAt of [undefined, 0]) {
+    const row = buildRows(snap([
+      s({ id: 'newClient', turnAt: NOW - 60_000, seenAt: NOW - 1_000 }),
+      s({ id: 'oldClient', turnAt, seenAt: NOW - 20_000 })
+    ]), 0)[0]!
+    expect(row.main!.id).toBe('oldClient')
+  }
+})
+
+test('offline sessions do not supply the main work line even with newer activity', () => {
+  const row = buildRows(snap([
+    s({ id: 'online', state: 'idle', turnAt: NOW - 600_000 }),
+    s({ id: 'offline', turnAt: NOW - 1_000, seenAt: NOW - 200_000 })
+  ]), 0)[0]!
+  expect(row.status).toBe('idle')
+  expect(row.main!.id).toBe('online')
+})
+
 test('ago and duration read like the mockup', () => {
   expect(ago(30_000)).toBe('just now')
   expect(ago(12 * 60_000)).toBe('12m')

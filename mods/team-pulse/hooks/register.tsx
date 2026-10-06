@@ -214,13 +214,33 @@ async function runCommand($: any, args: string): Promise<string> {
       await openPanel($)
       return `Joined ${r.data.team}. Your sessions are shared from now on; /team pause stops it.`
     }
+    case 'device': {
+      const [action, code = ''] = rest
+      if (action === 'code') {
+        if (!m) return NOT_IN_TEAM
+        const r = await call<{ pairCode: string; expiresAt: number }>($, m.server, { method: 'POST', path: `/teams/${m.teamId}/pair`, key: m.key })
+        if (!r.ok) return r.message
+        return `On your other Mac, run: /team device join ${r.data.pairCode} (works once, for 10 minutes).`
+      }
+      const parsed = action === 'join' ? parseJoinCode(code) : null
+      if (!parsed) return 'Use /team device code on your other Mac, then /team device join <code> on this Mac.'
+      if (joinDecision(m, parsed.teamId) === 'already') return `This Mac is already on ${m!.team} as ${m!.name}. To move it to another person, run /team leave first.`
+      const r = await call<any>($, srv, { method: 'POST', path: `/teams/${parsed.teamId}/pair/join`, body: { code: parsed.secret } })
+      if (!r.ok) return r.message
+      await $.store.set('membership', { server: srv, teamId: r.data.teamId, team: r.data.team, memberId: r.data.memberId, key: r.data.key, name: r.data.name, isAdmin: r.data.isAdmin })
+      nextBeatAt = 0
+      await beat($).catch(() => {})
+      await openPanel($)
+      return `This Mac is now part of ${r.data.name} on ${r.data.team}.`
+    }
     case 'leave': {
       if (!m) return 'You are not in a team.'
-      const r = await call($, m.server, { method: 'POST', path: `/teams/${m.teamId}/leave`, key: m.key })
+      const r = await call<{ ok: boolean; removed: 'device' | 'member' }>($, m.server, { method: 'POST', path: `/teams/${m.teamId}/leave`, key: m.key })
       if (!r.ok) return r.message
       await $.store.delete('membership')
       await dropPanel($)
       $.ui.status(undefined)
+      if (r.data.removed === 'device') return `This Mac left ${m.team}. Your other Macs are still on the team.`
       return `You left ${m.team}. Your shared data was deleted.`
     }
     case 'pause':
@@ -302,7 +322,7 @@ async function runCommand($: any, args: string): Promise<string> {
       await $.store.set('server', rest[0])
       return `Team server set to ${rest[0]} for new teams. Run /team join or /team create to use it.`
     default:
-      return 'Commands: /team, create, join, leave, pause, resume, say, status, clock, name, code, remove, server.'
+      return 'Commands: /team, create, join, device, leave, pause, resume, say, status, clock, name, code, remove, server.'
   }
 }
 

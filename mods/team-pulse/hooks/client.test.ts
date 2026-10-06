@@ -12,3 +12,11 @@ test('a join code splits into team and secret, and junk is refused', () => {
   expect(parseJoinCode('nope')).toBe(null)
   expect(parseJoinCode('ABCDEFGHIJ.k2m3n4p5')).toBe(null)
 })
+
+test('pairing codes use ten secret characters while regular join codes keep eight', () => {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'
+  const secret = Array.from(crypto.getRandomValues(new Uint8Array(10)), b => alphabet[b % alphabet.length]).join('')
+  expect(parseJoinCode(`abcdefghij.${secret}`)).toEqual({ teamId: 'abcdefghij', secret })
+  expect(parseJoinCode(`abcdefghij.${secret.slice(0, 9)}`)).toBe(null)
+  expect(parseJoinCode(`abcdefghij.${secret}a`)).toBe(null)
+})

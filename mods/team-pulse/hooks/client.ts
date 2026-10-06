@@ -32,6 +32,6 @@ export function backoffMs(failures: number): number {
 }
 
 export function parseJoinCode(code: string): { teamId: string; secret: string } | null {
-  const m = /^([a-z2-9]{10})\.([a-z2-9]{8})$/.exec(code.trim())
+  const m = /^([a-z2-9]{10})\.([a-z2-9]{8}|[a-z2-9]{10})$/.exec(code.trim())
   return m ? { teamId: m[1]!, secret: m[2]! } : null
 }

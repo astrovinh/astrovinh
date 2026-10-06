@@ -34,7 +34,8 @@ export function buildHeartbeat(f: SessionFacts): Heartbeat {
     state: f.now - f.lastTurnAt < IDLE_AFTER_MS ? 'working' : 'idle',
     fiveHour: percent(f.fiveHour),
     week: percent(f.week),
-    startedAt: f.startedAt
+    startedAt: f.startedAt,
+    turnAt: f.lastTurnAt
   }
 }
 

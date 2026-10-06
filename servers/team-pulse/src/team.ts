@@ -24,6 +24,9 @@ export class Team extends DurableObject {
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, is_admin INTEGER NOT NULL, joined_at INTEGER NOT NULL);
       CREATE UNIQUE INDEX IF NOT EXISTS members_name_key ON members (name_key);
+      CREATE TABLE IF NOT EXISTS keys (key_hash TEXT PRIMARY KEY, member TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS keys_member ON keys (member);
+      CREATE TABLE IF NOT EXISTS pairs (code_hash TEXT PRIMARY KEY, member TEXT NOT NULL, expires_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, member TEXT NOT NULL, project TEXT NOT NULL, branch TEXT NOT NULL, line TEXT NOT NULL, state TEXT NOT NULL, state_since INTEGER NOT NULL, five_hour REAL, week REAL, started_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS segments (session TEXT NOT NULL, member TEXT NOT NULL, start_at INTEGER NOT NULL, end_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS segments_session_end ON segments (session, end_at);
@@ -36,9 +39,16 @@ export class Team extends DurableObject {
     if (!cols.includes('status')) this.sql.exec("ALTER TABLE members ADD COLUMN status TEXT NOT NULL DEFAULT ''")
     if (!cols.includes('status_at')) this.sql.exec('ALTER TABLE members ADD COLUMN status_at INTEGER NOT NULL DEFAULT 0')
     if (!cols.includes('tz')) this.sql.exec("ALTER TABLE members ADD COLUMN tz TEXT NOT NULL DEFAULT ''")
+    const sessionCols = this.sql.exec('PRAGMA table_info(sessions)').toArray().map(r => String(r.name))
+    if (!sessionCols.includes('turn_at')) this.sql.exec('ALTER TABLE sessions ADD COLUMN turn_at INTEGER NOT NULL DEFAULT 0')
     // Segments recorded before active vs idle existed were all treated as working, so that is the default.
     const segCols = this.sql.exec('PRAGMA table_info(segments)').toArray().map(r => String(r.name))
     if (!segCols.includes('state')) this.sql.exec("ALTER TABLE segments ADD COLUMN state TEXT NOT NULL DEFAULT 'working'")
+    // Copy legacy keys once. Repeating this after a device leaves would restore its revoked key.
+    if (this.meta('keys_migrated') !== '1') {
+      this.sql.exec('INSERT OR IGNORE INTO keys (key_hash, member, created_at) SELECT key_hash, id, joined_at FROM members')
+      this.setMeta('keys_migrated', '1')
+    }
     this.clearStoredProjects()
   }
 
@@ -77,6 +87,7 @@ export class Team extends DurableObject {
       if (/UNIQUE constraint failed: members\.name_key/i.test(String(e))) return null
       throw e
     }
+    this.sql.exec('INSERT INTO keys (key_hash, member, created_at) VALUES (?, ?, ?)', keyHash, id, now)
     this.view = null
     return { id, key }
   }
@@ -120,6 +131,33 @@ export class Team extends DurableObject {
     if (!m) return fail(409, `Someone on the team is already called ${name}. Join with a different name.`)
     return ok({ teamId: this.meta('id'), team: this.meta('team'), memberId: m.id, key: m.key, isAdmin: false })
   }
+
+  async pair(key: string, now: number): Promise<Res> {
+    const code = randomId(10)
+    const codeHash = await sha256(code)
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (this.limited(`pr:${me.id}`, 4, now)) return fail(429, 'Too many pairing codes. Wait a minute and try again.')
+    const expiresAt = now + 10 * 60_000
+    this.sql.exec('DELETE FROM pairs WHERE member = ?', me.id)
+    this.sql.exec('INSERT INTO pairs (code_hash, member, expires_at) VALUES (?, ?, ?)', codeHash, me.id, expiresAt)
+    return ok({ pairCode: `${this.meta('id')}.${code}`, expiresAt })
+  }
+
+  async pairJoin(body: any, now: number): Promise<Res> {
+    if (this.limited('pairjoin', 10, now)) return fail(429, 'Too many pairing attempts. Wait a minute and try again.')
+    const key = randomHex(32)
+    // No await between looking up the code, consuming it and inserting the key: a code can be used only once.
+    const [codeHash, keyHash] = await Promise.all([sha256(typeof body?.code === 'string' ? body.code : ''), sha256(key)])
+    const r = this.sql.exec(
+      'SELECT p.code_hash, m.id, m.name, m.is_admin FROM pairs p JOIN members m ON m.id = p.member WHERE p.code_hash = ? AND p.expires_at > ?',
+      codeHash, now
+    ).toArray()[0]
+    if (!r || !safeEqual(codeHash, String(r.code_hash))) return fail(403, 'That pairing code is not valid or has expired. Run /team device code again on your other Mac.')
+    this.sql.exec('DELETE FROM pairs WHERE code_hash = ?', codeHash)
+    this.sql.exec('INSERT INTO keys (key_hash, member, created_at) VALUES (?, ?, ?)', keyHash, String(r.id), now)
+    return ok({ teamId: this.meta('id'), team: this.meta('team'), memberId: String(r.id), key, isAdmin: Number(r.is_admin) === 1, name: String(r.name) })
+  }
   static readonly OFFLINE_AFTER_MS = 150_000
   static readonly KEEP_MS = 7 * 86_400_000
   static readonly PRUNE_EVERY_MS = 3_600_000
@@ -128,7 +166,7 @@ export class Team extends DurableObject {
 
   protected async me(key: string): Promise<{ id: string; name: string; isAdmin: boolean } | null> {
     if (!key) return null
-    const r = this.sql.exec('SELECT id, name, is_admin FROM members WHERE key_hash = ?', await sha256(key)).toArray()[0]
+    const r = this.sql.exec('SELECT m.id, m.name, m.is_admin FROM keys k JOIN members m ON m.id = k.member WHERE k.key_hash = ?', await sha256(key)).toArray()[0]
     return r ? { id: String(r.id), name: String(r.name), isAdmin: Number(r.is_admin) === 1 } : null
   }
 
@@ -137,6 +175,7 @@ export class Team extends DurableObject {
     if (now - Number(this.meta('pruned_at') ?? 0) < Team.PRUNE_EVERY_MS) return
     this.sql.exec('DELETE FROM segments WHERE end_at < ?', now - Team.KEEP_MS)
     this.sql.exec('DELETE FROM sessions WHERE seen_at < ?', now - Team.KEEP_MS)
+    this.sql.exec('DELETE FROM pairs WHERE expires_at <= ?', now)
     this.setMeta('pruned_at', String(now))
   }
 
@@ -154,15 +193,16 @@ export class Team extends DurableObject {
     const since = existing && String(existing.state) === state ? Number(existing.state_since) : now
     const pct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null)
     const startedAt = typeof body?.startedAt === 'number' && Number.isFinite(body.startedAt) ? body.startedAt : now
+    const turnAt = typeof body?.turnAt === 'number' && Number.isFinite(body.turnAt) ? Math.min(body.turnAt, now) : 0
     this.sql.exec(
-      `INSERT INTO sessions (id, member, project, branch, line, state, state_since, five_hour, week, started_at, seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO sessions (id, member, project, branch, line, state, state_since, five_hour, week, started_at, seen_at, turn_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET project = excluded.project, branch = excluded.branch, line = excluded.line,
          state = excluded.state, state_since = excluded.state_since, five_hour = excluded.five_hour, week = excluded.week,
-         started_at = excluded.started_at, seen_at = excluded.seen_at`,
+         started_at = excluded.started_at, seen_at = excluded.seen_at, turn_at = excluded.turn_at`,
       // The repo folder name is not shared any more: older clients still send it as `project` and at the start of `line`; both are dropped here.
       sid, me.id, '', text(body?.branch, CAPS.branch), withoutFolder(text(body?.line, CAPS.line), text(body?.project, CAPS.project)),
-      state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now
+      state, since, pct(body?.fiveHour), pct(body?.week), startedAt, now, turnAt
     )
     // A new session shows on the next poll; an existing one waits for the shared view to rebuild, or every heartbeat would rebuild it.
     if (!existing) this.view = null
@@ -215,7 +255,7 @@ export class Team extends DurableObject {
       sessions: sessions.map(s => ({
         id: String(s.id), member: String(s.member), project: '', branch: String(s.branch), line: String(s.line),
         state: String(s.state), stateSince: Number(s.state_since), fiveHour: s.five_hour === null ? null : Number(s.five_hour),
-        week: s.week === null ? null : Number(s.week), startedAt: Number(s.started_at), seenAt: Number(s.seen_at)
+        week: s.week === null ? null : Number(s.week), startedAt: Number(s.started_at), seenAt: Number(s.seen_at), turnAt: Number(s.turn_at)
       })),
       segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at), state: String(s.state) }))
     }
@@ -275,6 +315,8 @@ export class Team extends DurableObject {
   }
 
   protected deleteMember(id: string) {
+    this.sql.exec('DELETE FROM keys WHERE member = ?', id)
+    this.sql.exec('DELETE FROM pairs WHERE member = ?', id)
     this.sql.exec('DELETE FROM segments WHERE member = ?', id)
     this.sql.exec('DELETE FROM sessions WHERE member = ?', id)
     this.sql.exec('DELETE FROM members WHERE id = ?', id)
@@ -288,10 +330,13 @@ export class Team extends DurableObject {
   }
 
   async leave(key: string): Promise<Res> {
+    const keyHash = await sha256(key)
     const me = await this.me(key)
     if (!me) return fail(401, 'Not a member of this team')
+    this.sql.exec('DELETE FROM keys WHERE key_hash = ?', keyHash)
+    if (this.sql.exec('SELECT 1 FROM keys WHERE member = ? LIMIT 1', me.id).toArray().length) return ok({ ok: true, removed: 'device' })
     this.deleteMember(me.id)
-    return ok({ ok: true })
+    return ok({ ok: true, removed: 'member' })
   }
 
   async remove(key: string, memberId: string): Promise<Res> {

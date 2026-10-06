@@ -36,6 +36,12 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 
    That code is only an example. Ask Astro for the real one. Use the name your teammates know you by.
 
+## Using more than one Mac
+
+On a Mac that is already on the team, run `/team device code`. On the other Mac, run `/team device join <code>` with the code from that reply. It works once, for 10 minutes. Both Macs share your name, animal, away note and clock, with one row for you on the team.
+
+Already joined twice? On the extra Mac, run `/team leave`, then `/team device join <code>` using a fresh code from the Mac you are keeping. Its old history goes away.
+
 ## Every day
 
 | You type or see | What it does |
@@ -63,6 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-ba
 - Your 5-hour and weekly limit percent.
 - How many Claude Code sessions you have open, and how long each has been open.
 - When you were active or idle in the last 12 hours (active means you sent a request or Claude was working on it).
+- The time of your last activity in each session.
 - Your away note, if you set one.
 - Your time zone, only if you turn it on.
 
@@ -74,7 +81,7 @@ The person who runs the team server (Astro) can read everything it stores.
 
 Never shared: your prompts, Claude's replies, your code, file paths, folder names, or cost.
 
-Kept for 7 days. `/team leave` deletes everything about you.
+Kept for 7 days. `/team leave` disconnects this Mac. Leaving from your last Mac deletes everything about you.
 
 ## If something looks wrong
 
@@ -94,13 +101,13 @@ Split view makes each half narrow, and the panel only reopens by itself when the
 Type `/team name` followed by the right name, for example `/team name Brian`.
 
 **I joined twice by mistake.**
-Ask Astro to remove the extra name, then keep using the one you want. Use `/team name` to rename instead of joining again.
+Follow "Using more than one Mac" above to pair the extra Mac to the name you are keeping. Use `/team name` to rename instead of joining again.
 
 **I want to stop sharing.**
-Type `/team pause`. To leave the team and delete your data, type `/team leave`.
+Type `/team pause`. To disconnect this Mac, type `/team leave`. Leaving from your last Mac deletes your data.
 
 ## Update or remove
 
 To update, run the install command again.
 
-To remove: type `/team leave` first if you want your data deleted, then remove the `mods/team-pulse` path from `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` (a backup was saved next to it when you installed).
+To remove: type `/team leave` first to disconnect this Mac, then remove the `mods/team-pulse` path from `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` (a backup was saved next to it when you installed).

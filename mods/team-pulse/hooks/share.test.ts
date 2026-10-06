@@ -14,7 +14,12 @@ const facts = {
 
 test('a heartbeat carries exactly the allowed fields', () => {
   const keys = Object.keys(buildHeartbeat(facts)).sort()
-  expect(keys).toEqual(['branch', 'fiveHour', 'line', 'project', 'session', 'startedAt', 'state', 'week'])
+  expect(keys).toEqual(['branch', 'fiveHour', 'line', 'project', 'session', 'startedAt', 'state', 'turnAt', 'week'])
+})
+
+test('a heartbeat shares the last prompt, tool or turn activity time', () => {
+  expect(buildHeartbeat(facts).turnAt).toBe(facts.lastTurnAt)
+  expect(buildHeartbeat({ ...facts, lastTurnAt: 0 }).turnAt).toBe(0)
 })
 
 test('the repo folder name is never shared: project is always empty', () => {

@@ -57,6 +57,10 @@ export default {
     switch (route) {
       case 'POST join':
         return json(await t.join(body, now))
+      case 'POST pair':
+        return json(await t.pair(key, now))
+      case 'POST pair/join':
+        return json(await t.pairJoin(body, now))
       case 'PUT sessions/:id': {
         const sid = decode(parts[3] ?? '')
         if (sid === null) return json({ status: 400, body: { error: 'Bad session id' } })
