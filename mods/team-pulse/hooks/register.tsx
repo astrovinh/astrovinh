@@ -13,6 +13,7 @@ import { paneStateOf, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { buildHeartbeat, joinDecision, sessionIdFor } from './share'
+import { inbox, targetOf } from './signals'
 
 const snapshot = atom({ plugin: 'murror', key: 'snapshot' } as const, null as Snapshot | null)
 const fetchedAt = atom({ plugin: 'murror', key: 'fetchedAt' } as const, 0)
@@ -104,7 +105,8 @@ async function showPresence($: any) {
       rows: snap ? buildRows(snap, Date.now() - at) : [],
       paused: (await $.store.get('paused')) === true,
       problem: await read($, problem),
-      hasSnapshot: snap !== null
+      hasSnapshot: snap !== null,
+      hasHandoff: inbox(snap, snap?.you ?? '', snap ? snap.now + Math.max(0, at ? Date.now() - at : 0) : 0).length > 0
     })
   )
 }
@@ -269,6 +271,43 @@ async function runCommand($: any, args: string): Promise<string> {
       await refresh($)
       return text ? `Your status is set: "${r.data.status ?? text}". /team status alone clears it.` : 'Status cleared.'
     }
+    case 'handoff':
+    case 'wave': {
+      if (!m) return NOT_IN_TEAM
+      const args = rest.join(' ')
+      const usage = sub === 'handoff' ? 'Use /team handoff <name> <note>.' : 'Use /team wave <name>.'
+      if (!args) return usage
+      let snap = await read($, snapshot)
+      if (!snap) {
+        await refresh($)
+        snap = await read($, snapshot)
+        if (!snap) return (await read($, problem)) ?? 'Open /team to see the names.'
+      }
+      const target = targetOf(args, snap.members, m.memberId)
+      if (!target || (sub === 'wave' && target.rest)) return `No one on the team is called ${args}. Open /team to see the names.`
+      if (sub === 'handoff' && !target.rest) return usage
+      const r = await call($, m.server, { method: 'POST', path: `/teams/${m.teamId}/signals`, key: m.key, body: { kind: sub, to: target.member.id, ...(sub === 'handoff' ? { text: target.rest } : {}) } })
+      if (!r.ok) return r.message
+      await refresh($)
+      return sub === 'handoff' ? `Handoff sent to ${target.member.name}. It waits on their team panel until they take or dismiss it.` : `You waved at ${target.member.name}. A small hand shows on your animal for 12 hours.`
+    }
+    case 'win': {
+      if (!m) return NOT_IN_TEAM
+      const text = rest.join(' ').replace(/^["']|["']$/g, '').trim()
+      if (!text) return 'Use /team win <note>.'
+      const r = await call($, m.server, { method: 'POST', path: `/teams/${m.teamId}/signals`, key: m.key, body: { kind: 'win', text } })
+      if (!r.ok) return r.message
+      await refresh($)
+      return 'Shared with the team for 48 hours.'
+    }
+    case 'signals': {
+      if (rest.length !== 1 || (rest[0] !== 'on' && rest[0] !== 'off')) return 'Use /team signals on|off.'
+      const hidden = rest[0] === 'off'
+      await $.store.set('signalsHidden', hidden)
+      // Redraw the panel's local choice without a server call. Handoffs stay visible either way.
+      await update($, snapshot, value => value ? { ...value } : value)
+      return hidden ? 'Waves and wins are hidden on this Mac. Handoffs still show.' : 'Waves and wins show on this Mac.'
+    }
     case 'clock': {
       if (!m) return NOT_IN_TEAM
       const choice = rest.join(' ')
@@ -322,7 +361,7 @@ async function runCommand($: any, args: string): Promise<string> {
       await $.store.set('server', rest[0])
       return `Team server set to ${rest[0]} for new teams. Run /team join or /team create to use it.`
     default:
-      return 'Commands: /team, create, join, device, leave, pause, resume, say, status, clock, name, code, remove, server.'
+      return 'Commands: /team, create, join, device, leave, pause, resume, say, status, clock, handoff, wave, win, signals, name, code, remove, server.'
   }
 }
 
@@ -380,9 +419,22 @@ export const register: Register = on => {
   })
 
   on('ui.press', async ($, e, next) => {
-    if (e.plugin !== 'murror' || !e.element.startsWith('expand:')) return next(e)
-    const id = e.element.slice('expand:'.length)
-    await update($, expanded, list => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]))
+    if (e.plugin !== 'murror') return next(e)
+    if (e.element.startsWith('expand:')) {
+      const id = e.element.slice('expand:'.length)
+      await update($, expanded, list => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]))
+    } else if (e.element.startsWith('take:') || e.element.startsWith('dismiss:')) {
+      const action = e.element.startsWith('take:') ? 'take' : 'dismiss'
+      const id = e.element.slice(action.length + 1)
+      const m = await membership($)
+      if (!m) {
+        await update($, problem, () => NOT_IN_TEAM)
+      } else {
+        const r = await call($, m.server, { method: 'PUT', path: `/teams/${m.teamId}/signals/${encodeURIComponent(id)}`, key: m.key, body: { action } })
+        if (r.ok) await refresh($)
+        else await update($, problem, () => r.message)
+      }
+    }
     return next(e)
   })
 
@@ -397,6 +449,7 @@ export const register: Register = on => {
       expanded: await read($, expanded),
       fetchedAgoMs: agoMs,
       onExpand: () => {},
+      signalsHidden: (await $.store.get('signalsHidden')) === true,
       joined: (await membership($)) !== null
     })
   })

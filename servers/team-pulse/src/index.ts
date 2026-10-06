@@ -52,7 +52,7 @@ export default {
     const teamId = parts[1] ?? ''
     if (!TEAM_ID.test(teamId)) return json({ status: 404, body: { error: 'No such team' } })
     const t = team(env, teamId)
-    const route = `${req.method} ${parts.slice(2).join('/').replace(/^(sessions|members)\/[^/]+$/, '$1/:id')}`
+    const route = `${req.method} ${parts.slice(2).join('/').replace(/^(sessions|members|signals)\/[^/]+$/, '$1/:id')}`
 
     switch (route) {
       case 'POST join':
@@ -61,6 +61,10 @@ export default {
         return json(await t.pair(key, now))
       case 'POST pair/join':
         return json(await t.pairJoin(body, now))
+      case 'POST signals':
+        return json(await t.sendSignal(key, body, now))
+      case 'PUT signals/:id':
+        return json(await t.finishHandoff(key, decode(parts[3] ?? '') ?? '', body, now))
       case 'PUT sessions/:id': {
         const sid = decode(parts[3] ?? '')
         if (sid === null) return json({ status: 400, body: { error: 'Bad session id' } })

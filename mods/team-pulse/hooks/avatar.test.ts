@@ -74,3 +74,18 @@ test('a non-ASCII or empty seed still draws', () => {
     expect(a.alt.endsWith(' avatar')).toBe(true)
   }
 })
+
+test('a waved avatar adds an 8 by 8 pixel hand at the top left in the approved color', () => {
+  const plain = avatarSvg('m1', 30, 'live')
+  expect(avatarSvg('m1', 30, 'live', false)).toEqual(plain)
+  const waved = avatarSvg('m1', 30, 'live', true)
+  expect(waved.source).not.toBe(plain.source)
+  const pixels = [...waved.source.matchAll(/<rect x="(\d+)" y="(\d+)" width="1" height="1" fill="#F2C27A"\/>/g)]
+  expect(pixels.length).toBeGreaterThan(20)
+  expect(Math.min(...pixels.map(p => Number(p[1])))).toBe(0)
+  expect(Math.max(...pixels.map(p => Number(p[1])))).toBe(7)
+  expect(Math.min(...pixels.map(p => Number(p[2])))).toBe(0)
+  expect(Math.max(...pixels.map(p => Number(p[2])))).toBe(7)
+  expect(waved.alt).toBe('penguin avatar, waved')
+  expect(waved.source.includes('fill="#8CC9A1"')).toBe(true)
+})

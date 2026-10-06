@@ -6,6 +6,7 @@ import { bubbleSvg, ROW_SVG_H, ROW_SVG_W, rowSvg, STRIP_SVG_H, STRIP_SVG_W, stri
 import type { Row } from './rows'
 import { ago, otherLine, withYouLine } from './rows'
 import { cap } from './share'
+import { inbox, latestWin, wavers, wavesTo } from './signals'
 import { strip } from './strip'
 
 const BUBBLE = '#34332e'
@@ -16,7 +17,7 @@ const QUIET = '#AAA69A'
 export function drawPanel(
   ui: any,
   surface: string,
-  v: { rows: Row[]; snapshot: Snapshot | null; problem: string | null; expanded: string[]; fetchedAgoMs: number; joined: boolean; onExpand: (memberId: string) => void }
+  v: { rows: Row[]; snapshot: Snapshot | null; problem: string | null; expanded: string[]; fetchedAgoMs: number; joined: boolean; signalsHidden?: boolean; onExpand: (memberId: string) => void }
 ) {
   const { Box, Text, Svg, Button } = ui
 
@@ -37,6 +38,11 @@ export function drawPanel(
 
   const snap = v.snapshot
   const now = snap.now + v.fetchedAgoMs
+  const handoffs = inbox(snap, snap.you, now)
+  const win = v.signalsHidden ? null : latestWin(snap, now)
+  const waved = v.signalsHidden ? new Set<string>() : wavers(snap, now)
+  const received = new Set(v.signalsHidden ? [] : wavesTo({ ...snap, now }, snap.you).map(s => s.from))
+  const nameOf = (id: string) => snap.members.find(m => m.id === id)?.name ?? 'Teammate'
 
   return (
     <Box flexDirection="column">
@@ -44,6 +50,28 @@ export function drawPanel(
         <Text bold>{snap.team}</Text>
         <Text dimColor color={QUIET} wrap="truncate">{withYouLine(v.rows)}</Text>
       </Box>
+      {handoffs.slice(0, 2).map(handoff => (
+        <Box key={`handoff:${handoff.id}`} flexDirection="column" marginX={2} marginBottom={1} paddingX={1} borderStyle="round" borderColor={BUBBLE} backgroundColor="#292824">
+          <Text dimColor color={QUIET} wrap="truncate">{`FOR YOU \u00b7 FROM ${nameOf(handoff.from).toUpperCase()} \u00b7 ${ago(Math.max(0, now - handoff.at))} ago`}</Text>
+          <Box height={5} overflow="hidden">
+            <Text wrap="wrap">{handoff.text}</Text>
+          </Box>
+          <Box gap={1}>
+            <Button key={`take:${handoff.id}`} onPress={() => {}} label="Take" />
+            <Button key={`dismiss:${handoff.id}`} plain onPress={() => {}} label="Dismiss" />
+          </Box>
+        </Box>
+      ))}
+      {handoffs.length > 2 ? <Box paddingX={2}><Text dimColor color={QUIET}>{`+${handoffs.length - 2} more`}</Text></Box> : null}
+      {win ? (
+        <Box paddingX={2} marginBottom={1} gap={1}>
+          <Box flexShrink={0}><Text dimColor color={QUIET}>WIN</Text></Box>
+          <Box flexGrow={1} flexShrink={1} minWidth={0}>
+            <Text wrap="truncate">{`${nameOf(win.win.from)}: ${win.win.text}`}</Text>
+          </Box>
+          {win.others ? <Box flexShrink={0}><Text dimColor color={QUIET}>{`+${win.others}`}</Text></Box> : null}
+        </Box>
+      ) : null}
       {v.problem ? (
         <Box paddingX={2}>
           <Text dimColor>{`${v.problem} \u00b7 last update ${ago(v.fetchedAgoMs)} ago`}</Text>
@@ -58,14 +86,17 @@ export function drawPanel(
               {surface === 'desktop' && Svg ? (
                 <Box alignItems="center">
                   <Box marginRight={1}>
-                    <Svg {...avatarSvg(r.id, 30, r.status)} width={30} height={30} />
+                    <Svg {...avatarSvg(r.id, 30, r.status, waved.has(r.id))} width={30} height={30} />
                   </Box>
                   <Text bold>{r.name}</Text>
+                  {received.has(r.id) ? <Text dimColor color={QUIET}>{' waved at you'}</Text> : null}
                 </Box>
               ) : (
                 <Text>
                   <Text color={DOT[r.status]}>{'\u25cf '}</Text>
                   <Text bold>{r.name}</Text>
+                  {waved.has(r.id) ? <Text dimColor color={QUIET}>{' \u270b'}</Text> : null}
+                  {received.has(r.id) ? <Text dimColor color={QUIET}>{' waved at you'}</Text> : null}
                 </Text>
               )}
               <Text dimColor color={QUIET}>{r.clock ?? r.statusText}</Text>

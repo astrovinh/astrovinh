@@ -2,9 +2,18 @@
 
 See who on the team is working in Claude Code, what they are working on, and their limits. You can also leave an away note.
 
-## What's new (Oct 5)
+## What's new (Oct 6)
 
 Already installed? Update in two steps: run the install command below again, then open a new Claude Code session.
+
+- **A calmer panel:** everyone keeps the same place (you first, then the order people joined), so nobody jumps around. Each row shows the 12h strip; press **More** for branch, limits and Claude activity.
+- **Local clocks:** `/team clock on` shows your local time next to your name, like "VN 10:40 PM". It is off until you turn it on; `/team clock off` hides it.
+- **One you across Macs:** run `/team device code` on a Mac that is already on the team, then `/team device join <code>` on the other one. Both Macs show as one row. Already joined twice? See "Using more than one Mac" below.
+- **Handoffs:** `/team handoff Brian Ready for review, check step 2` leaves Brian a card with Take and Dismiss. Only you and Brian see it.
+- **Waves and wins:** `/team wave Khanh` puts a small hand on your animal for 12 hours. `/team win Release notes are done` shares a small win with the team for 48 hours. `/team signals off` hides both on your Mac.
+- **Work lines for every role:** the "working on" line now fits design, research, planning and ops work, not only code.
+
+## What's new (Oct 5)
 
 - **Animal avatars:** every teammate gets their own pixel animal in the panel, with a small dot for working, idle or offline. It stays the same if they change their name.
 - **"With you right now":** the top of the panel tells you who else is working at this moment.
@@ -60,6 +69,16 @@ Already joined twice? On the extra Mac, run `/team leave`, then `/team device jo
 | `/team pause` | Stops sharing from this Mac. |
 | `/team resume` | Starts sharing again. |
 
+## Small signals
+
+Use `/team handoff <name> <note>` to leave a teammate something to pick up, for example `/team handoff Linh Their draft is ready for review`. Only you and the receiver see the note. It waits on their team panel until they press Take or Dismiss, or for 7 days. A small hint under their prompt tells them a handoff is waiting.
+
+Use `/team wave <name>` to say hello. A small hand shows on your animal for 12 hours. The whole team sees the hand; the receiver also sees "waved at you" beside your name. You can wave at the same person again after 4 hours.
+
+Use `/team win <note>` to share something that went well, for example `/team win Their research draft is ready`. The whole team sees it for 48 hours.
+
+Use `/team signals off` to hide waves and wins on this Mac, and `/team signals on` to show them again. Handoffs addressed to you always show. There are no read receipts, reminders, counts or streaks.
+
 ## What your teammates see
 
 - Your name.
@@ -72,6 +91,7 @@ Already joined twice? On the extra Mac, run `/team leave`, then `/team device jo
 - The time of your last activity in each session.
 - Your away note, if you set one.
 - Your time zone, only if you turn it on.
+- Handoff notes (only you and the receiver see them), waves and wins (the whole team sees them).
 
 This is sent every 60 seconds while a session is open. Your own row in `/team` shows exactly what is shared about you.
 

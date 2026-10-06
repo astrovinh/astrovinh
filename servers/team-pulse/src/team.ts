@@ -2,7 +2,10 @@ import { DurableObject } from 'cloudflare:workers'
 import { fail, nameKey, ok, randomHex, randomId, safeEqual, sha256, text } from './util'
 import type { Res } from './util'
 
-export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 280 } as const
+export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 280, handoff: 280, win: 120 } as const
+
+type Signal = { id: string; kind: 'handoff' | 'wave' | 'win'; from: string; to: string; text: string; at: number }
+const SIGNAL_LIFE = { handoff: 7 * 86_400_000, wave: 12 * 3_600_000, win: 48 * 3_600_000 } as const
 
 /** Removes a leading repo folder name from a line: "<folder> \u00b7 main" becomes "main", "<folder>" becomes "". Anything else is kept. */
 export function withoutFolder(line: string, folder: string): string {
@@ -15,7 +18,7 @@ export class Team extends DurableObject {
   sql: SqlStorage
   hits = new Map<string, number[]>()
   /** The team view every poll shares; see snapshot(). Changes a member makes clear it, so they show on the next poll. */
-  view: { at: number; body: Record<string, unknown> } | null = null
+  view: { at: number; body: Record<string, unknown> & { signals: Signal[] } } | null = null
 
   constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env as never)
@@ -27,6 +30,8 @@ export class Team extends DurableObject {
       CREATE TABLE IF NOT EXISTS keys (key_hash TEXT PRIMARY KEY, member TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS keys_member ON keys (member);
       CREATE TABLE IF NOT EXISTS pairs (code_hash TEXT PRIMARY KEY, member TEXT NOT NULL, expires_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS signals (id TEXT PRIMARY KEY, kind TEXT NOT NULL, from_member TEXT NOT NULL, to_member TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, done_at INTEGER NOT NULL DEFAULT 0);
+      CREATE INDEX IF NOT EXISTS signals_created ON signals (created_at);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, member TEXT NOT NULL, project TEXT NOT NULL, branch TEXT NOT NULL, line TEXT NOT NULL, state TEXT NOT NULL, state_since INTEGER NOT NULL, five_hour REAL, week REAL, started_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS segments (session TEXT NOT NULL, member TEXT NOT NULL, start_at INTEGER NOT NULL, end_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS segments_session_end ON segments (session, end_at);
@@ -96,10 +101,10 @@ export class Team extends DurableObject {
     return this.sql.exec('SELECT 1 FROM members WHERE name_key = ?', nameKey(name)).toArray().length > 0
   }
 
-  /** True when `id` already made `perMinute` calls in the last minute. */
-  protected limited(id: string, perMinute: number, now: number): boolean {
-    const recent = (this.hits.get(id) ?? []).filter(t => now - t < 60_000)
-    const over = recent.length >= perMinute
+  /** True when `id` already made `limit` calls in the window; existing callers keep their one-minute limits. */
+  protected limited(id: string, limit: number, now: number, windowMs = 60_000): boolean {
+    const recent = (this.hits.get(id) ?? []).filter(t => now - t < windowMs)
+    const over = recent.length >= limit
     if (!over) recent.push(now)
     this.hits.set(id, recent)
     return over
@@ -176,6 +181,8 @@ export class Team extends DurableObject {
     this.sql.exec('DELETE FROM segments WHERE end_at < ?', now - Team.KEEP_MS)
     this.sql.exec('DELETE FROM sessions WHERE seen_at < ?', now - Team.KEEP_MS)
     this.sql.exec('DELETE FROM pairs WHERE expires_at <= ?', now)
+    const removedSignals = this.sql.exec("DELETE FROM signals WHERE created_at < ? OR (kind = 'handoff' AND done_at != 0)", now - Team.KEEP_MS)
+    if (removedSignals.rowsWritten > 0) this.view = null
     this.setMeta('pruned_at', String(now))
   }
 
@@ -227,10 +234,13 @@ export class Team extends DurableObject {
     const v = this.view
     const fresh = v !== null && now >= v.at && now - v.at < Team.VIEW_MS
     if (!fresh) this.view = { at: now, body: this.readView(now) }
-    return ok({ ...this.view!.body, you: me.id })
+    const live = this.view!.body.signals.filter(s => now - s.at < SIGNAL_LIFE[s.kind])
+    // The cached view is shared by the whole team. Private handoffs must be filtered for EACH caller here.
+    const signals = live.filter(s => s.kind !== 'handoff' || s.from === me.id || s.to === me.id)
+    return ok({ ...this.view!.body, signals, you: me.id })
   }
 
-  protected readView(now: number): Record<string, unknown> {
+  protected readView(now: number): Record<string, unknown> & { signals: Signal[] } {
     const members = this.sql.exec('SELECT id, name, status, status_at, tz FROM members ORDER BY joined_at, rowid').toArray()
     // Sessions seen in the last 12 hours, plus each member's most recent one of any age ("seen 2d ago").
     const sessions = this.sql
@@ -244,9 +254,17 @@ export class Team extends DurableObject {
       )
       .toArray()
     const segments = this.sql.exec('SELECT session, member, start_at, end_at, state FROM segments WHERE end_at >= ? ORDER BY start_at', now - Team.WINDOW_MS).toArray()
+    const signals = this.sql.exec(
+      `SELECT id, kind, from_member, to_member, text, created_at FROM signals WHERE
+       (kind = 'handoff' AND done_at = 0 AND created_at > ?) OR
+       (kind = 'wave' AND created_at > ?) OR (kind = 'win' AND created_at > ?)
+       ORDER BY created_at DESC, rowid DESC`,
+      now - SIGNAL_LIFE.handoff, now - SIGNAL_LIFE.wave, now - SIGNAL_LIFE.win
+    ).toArray()
     return {
       team: this.meta('team'),
       now,
+      signals: signals.map(s => ({ id: String(s.id), kind: String(s.kind) as Signal['kind'], from: String(s.from_member), to: String(s.to_member), text: String(s.text), at: Number(s.created_at) })),
       members: members.map(m => ({
         id: String(m.id), name: String(m.name),
         status: String(m.status) || null, statusAt: String(m.status) ? Number(m.status_at) : null,
@@ -259,6 +277,50 @@ export class Team extends DurableObject {
       })),
       segments: segments.map(s => ({ session: String(s.session), member: String(s.member), start: Number(s.start_at), end: Number(s.end_at), state: String(s.state) }))
     }
+  }
+
+  async sendSignal(key: string, body: any, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    const kind = body?.kind
+    if (kind !== 'handoff' && kind !== 'wave' && kind !== 'win') return fail(400, 'Choose a handoff, wave or win.')
+    let to = ''
+    let note = ''
+    if (kind === 'win') {
+      if (body?.to !== undefined && body.to !== '') return fail(400, 'A win is shared with the whole team.')
+      note = text(body?.text, CAPS.win)
+      if (!note) return fail(400, 'Give a note for the team.')
+      if (this.limited(`win:${me.id}`, 6, now, 86_400_000)) return fail(429, 'Too many wins today. Try again later.')
+    } else {
+      if (body?.to === me.id) return fail(400, kind === 'handoff' ? 'A handoff goes to a teammate, not to you.' : 'A wave goes to a teammate, not to you.')
+      const receiver = typeof body?.to === 'string' ? this.sql.exec('SELECT id, name FROM members WHERE id = ?', body.to).toArray()[0] : null
+      if (!receiver) return fail(400, 'Choose someone on the team.')
+      to = String(receiver.id)
+      if (kind === 'handoff') {
+        note = text(body?.text, CAPS.handoff)
+        if (!note) return fail(400, 'Give a handoff note.')
+        if (this.limited(`ho:${me.id}`, 10, now, 3_600_000)) return fail(429, 'Too many handoffs this hour. Try again later.')
+      } else {
+        const recent = this.sql.exec("SELECT 1 FROM signals WHERE kind = 'wave' AND from_member = ? AND to_member = ? AND created_at > ? LIMIT 1", me.id, to, now - 4 * 3_600_000).toArray()[0]
+        if (recent) return fail(429, `You already waved at ${String(receiver.name)}. Try again later.`)
+      }
+    }
+    const id = randomId(16)
+    this.sql.exec('INSERT INTO signals (id, kind, from_member, to_member, text, created_at) VALUES (?, ?, ?, ?, ?, ?)', id, kind, me.id, to, note, now)
+    this.view = null
+    return ok({ ok: true, id })
+  }
+
+  async finishHandoff(key: string, id: string, body: any, now: number): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    const nothing = () => fail(404, 'Nothing to update.')
+    if (body?.action !== 'take' && body?.action !== 'dismiss') return nothing()
+    const r = this.sql.exec("SELECT 1 FROM signals WHERE id = ? AND kind = 'handoff' AND to_member = ? AND done_at = 0", id, me.id).toArray()[0]
+    if (!r) return nothing()
+    this.sql.exec('UPDATE signals SET done_at = ? WHERE id = ?', now, id)
+    this.view = null
+    return ok({ ok: true })
   }
 
   /** Sets or clears the caller's own away status. An empty result clears it. */
@@ -315,6 +377,7 @@ export class Team extends DurableObject {
   }
 
   protected deleteMember(id: string) {
+    this.sql.exec('DELETE FROM signals WHERE from_member = ? OR to_member = ?', id, id)
     this.sql.exec('DELETE FROM keys WHERE member = ?', id)
     this.sql.exec('DELETE FROM pairs WHERE member = ?', id)
     this.sql.exec('DELETE FROM segments WHERE member = ?', id)

@@ -1,6 +1,6 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import type { Membership, Snapshot } from '../types'
+import type { Membership, Signal, Snapshot } from '../types'
 import { clockLabel } from './clock'
 
 const NOW = Date.UTC(2026, 9, 6, 15, 40)
@@ -211,4 +211,147 @@ test('team leave keeps the shared-data deletion reply for the last device', asyn
 test('team commands help includes device', async ($, on) => {
   mock.store(on)
   expect((await $.command.run({ ...command, args: 'help' })).text).toContain('device')
+})
+
+const signalSetup = (on: On, opts: { error?: string; noMember?: boolean; hidden?: boolean; signals?: Signal[] } = {}) => {
+  const store: Record<string, unknown> = { ...(opts.noMember ? {} : { membership: { ...onTeam(), name: 'Astro' } }), signalsHidden: opts.hidden ?? false }
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => { store[e.key] = e.value; return { value: undefined } })
+  const serverView: Snapshot = {
+    team: 'Murror', now: NOW, you: 'm1', members: [{ id: 'm1', name: 'Astro' }, { id: 'm2', name: 'Linh' }, { id: 'm3', name: 'Linh Nguyen' }, { id: 'k', name: 'Khanh' }], sessions: [], segments: [],
+    signals: opts.signals ?? [{ id: 'handoff1', kind: 'handoff', from: 'k', to: 'm1', text: 'Her study is ready for review', at: NOW }]
+  }
+  const state: Record<string, unknown> = { snapshot: serverView, fetchedAt: Date.now(), problem: null, expanded: [] }
+  on('state.get', (_, e) => ({ value: { value: state[e.key], version: 1 }, version: 1 }))
+  on('state.set', (_, e) => { state[e.key] = e.value; return { value: { isSet: true, version: 2 }, version: 2 } })
+  mock.clock(on, { now: NOW })
+  const statuses: (string | undefined)[] = []
+  on('ui.status', (_, e) => { statuses.push(e.text); return { value: undefined } })
+  const requests: { method: string | undefined; url: string; body: any }[] = []
+  on('http.fetch', (_, e) => {
+    const body = e.init?.body ? JSON.parse(e.init.body) : null
+    requests.push({ method: e.init?.method, url: e.url, body })
+    const response = (data: unknown, status = 200) => ({ value: { ok: status === 200, status, headers: {}, text: JSON.stringify(data) } })
+    if (e.init?.method !== 'GET' && opts.error) return response({ error: opts.error }, 429)
+    if (e.init?.method === 'PUT') {
+      const id = e.url.split('/').pop()
+      serverView.signals = serverView.signals!.filter(s => s.id !== id)
+      return response({ ok: true })
+    }
+    if (e.init?.method === 'POST') return response({ ok: true, id: 'new-signal' })
+    return response(serverView)
+  })
+  return { store, state, requests, statuses }
+}
+const signalPanel = { plugin: 'murror', surface: 'terminal' as const, component: 'Pane' as const, requestId: 'team', props: { title: 'Team', isFocused: true, bodyColumns: 80, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 50 }, view: {} } }
+
+test('team handoff matches the longest teammate name, sends the note and refreshes', async ($, on) => {
+  const p = signalSetup(on)
+  expect((await $.command.run({ ...command, args: 'handoff lINH ngUYEN Their draft is ready' })).text).toBe('Handoff sent to Linh Nguyen. It waits on their team panel until they take or dismiss it.')
+  expect(p.requests).toEqual([{ method: 'POST', url: 'https://pulse.test/teams/abcdefghij/signals', body: { kind: 'handoff', to: 'm3', text: 'Their draft is ready' } }, { method: 'GET', url: 'https://pulse.test/teams/abcdefghij', body: null }])
+})
+
+test('team wave sends only the receiver and confirms the twelve hour animal marker', async ($, on) => {
+  const p = signalSetup(on)
+  expect((await $.command.run({ ...command, args: 'wave Khanh' })).text).toBe('You waved at Khanh. A small hand shows on your animal for 12 hours.')
+  expect(p.requests[0]!.body).toEqual({ kind: 'wave', to: 'k' })
+  expect(p.requests.map(r => r.method)).toEqual(['POST', 'GET'])
+})
+
+test('team win sends the note with no receiver and confirms forty eight hour sharing', async ($, on) => {
+  const p = signalSetup(on)
+  expect((await $.command.run({ ...command, args: 'win Their draft is ready' })).text).toBe('Shared with the team for 48 hours.')
+  expect(p.requests[0]!.body).toEqual({ kind: 'win', text: 'Their draft is ready' })
+  expect(p.requests.map(r => r.method)).toEqual(['POST', 'GET'])
+})
+
+test('signal commands require membership and validate missing notes and unknown names', async ($, on) => {
+  const p = signalSetup(on)
+  for (const args of ['handoff', 'handoff Linh', 'wave', 'win']) expect((await $.command.run({ ...command, args })).text).toContain(`/team ${args.split(' ')[0]}`)
+  for (const args of ['wave Nobody', 'handoff Nobody']) expect((await $.command.run({ ...command, args })).text).toBe('No one on the team is called Nobody. Open /team to see the names.')
+  expect((await $.command.run({ ...command, args: 'wave Linh Nguyen extra' })).text).toBe('No one on the team is called Linh Nguyen extra. Open /team to see the names.')
+  expect((await $.command.run({ ...command, args: 'wave Astro' })).text).toBe('No one on the team is called Astro. Open /team to see the names.')
+  expect(p.requests).toHaveLength(0)
+  delete p.store.membership
+  for (const args of ['handoff Linh Draft', 'wave Linh', 'win Ready']) expect((await $.command.run({ ...command, args })).text).toContain('You are not in a team.')
+  expect(p.requests).toHaveLength(0)
+})
+
+test('a signal command fetches names when this session has no snapshot yet', async ($, on) => {
+  const p = signalSetup(on)
+  p.state.snapshot = null
+  expect((await $.command.run({ ...command, args: 'wave Linh Nguyen' })).text).toBe('You waved at Linh Nguyen. A small hand shows on your animal for 12 hours.')
+  expect(p.requests.map(r => r.method)).toEqual(['GET', 'POST', 'GET'])
+})
+
+test('signal commands return server failures without refreshing', async ($, on) => {
+  const p = signalSetup(on, { error: 'Please try again later.' })
+  for (const args of ['handoff Linh Review', 'wave Linh', 'win Ready']) expect((await $.command.run({ ...command, args })).text).toBe('Please try again later.')
+  expect(p.requests.map(r => r.method)).toEqual(['POST', 'POST', 'POST'])
+})
+
+test('team signals off and on persist a local choice across renders without a server call', async ($, on) => {
+  const p = signalSetup(on, { signals: [
+    { id: 'win', kind: 'win', from: 'm2', to: '', text: 'Their draft is ready', at: NOW },
+    { id: 'wave', kind: 'wave', from: 'm2', to: 'm1', text: '', at: NOW },
+    { id: 'handoff1', kind: 'handoff', from: 'k', to: 'm1', text: 'Her study is ready', at: NOW }
+  ] })
+  let ui = await $.ui.mount(signalPanel)
+  expect(JSON.stringify(await ui.drawn()).includes('WIN')).toBe(true)
+  expect((await $.command.run({ ...command, args: 'signals off' })).text).toContain('this Mac')
+  expect(p.store.signalsHidden).toBe(true)
+  // Our state event handlers replace core state and its redraw subscriptions, so remount after writes.
+  await ui.unmount()
+  ui = await $.ui.mount(signalPanel)
+  let tree = JSON.stringify(await ui.drawn())
+  expect(tree.includes('WIN') || tree.includes('waved at you')).toBe(false)
+  expect((await ui.find({ key: 'take:handoff1' }))?.text).toBe('Take')
+  await $.command.run({ ...command, args: 'signals on' })
+  expect(p.store.signalsHidden).toBe(false)
+  await ui.unmount()
+  ui = await $.ui.mount(signalPanel)
+  tree = JSON.stringify(await ui.drawn())
+  expect(tree.includes('WIN') && tree.includes('waved at you')).toBe(true)
+  expect((await $.command.run({ ...command, args: 'signals unknown' })).text).toContain('/team signals on|off')
+  expect(p.requests).toHaveLength(0)
+  await ui.unmount()
+})
+
+for (const action of ['take', 'dismiss']) {
+  test(`the panel ${action} button updates the handoff, refreshes and clears its status hint`, async ($, on) => {
+    const p = signalSetup(on)
+    let ui = await $.ui.mount(signalPanel)
+    await ui.press({ key: `${action}:handoff1` })
+    expect(p.requests).toEqual([{ method: 'PUT', url: 'https://pulse.test/teams/abcdefghij/signals/handoff1', body: { action } }, { method: 'GET', url: 'https://pulse.test/teams/abcdefghij', body: null }])
+    await ui.unmount()
+    ui = await $.ui.mount(signalPanel)
+    expect(await ui.find({ key: 'take:handoff1' })).toBeUndefined()
+    expect(p.statuses[p.statuses.length - 1]?.includes('a handoff for you')).toBe(false)
+    await ui.unmount()
+  })
+}
+
+test('a failed handoff button keeps the card and shows the message in the panel problem line', async ($, on) => {
+  const p = signalSetup(on, { error: 'Nothing to update.' })
+  let ui = await $.ui.mount(signalPanel)
+  await ui.press({ key: 'take:handoff1' })
+  expect(p.requests).toHaveLength(1)
+  expect(p.state.problem).toBe('Nothing to update.')
+  await ui.unmount()
+  ui = await $.ui.mount(signalPanel)
+  expect(JSON.stringify(await ui.drawn()).includes('Nothing to update.')).toBe(true)
+  expect((await ui.find({ key: 'take:handoff1' }))?.text).toBe('Take')
+  await ui.unmount()
+})
+
+test('the status line adds a hint only for received open handoffs, even when signals are hidden', async ($, on) => {
+  const p = signalSetup(on, { hidden: true })
+  await $.command.run({ ...command, args: 'win Ready' })
+  expect(p.statuses[p.statuses.length - 1]).toBe('Online members \u00b7 nobody right now \u00b7 a handoff for you \u00b7 /team')
+})
+
+test('team commands help includes handoff, wave, win and signals', async ($, on) => {
+  signalSetup(on)
+  const reply = (await $.command.run({ ...command, args: 'help' })).text
+  for (const word of ['handoff', 'wave', 'win', 'signals']) expect(reply).toContain(word)
 })

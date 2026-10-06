@@ -86,7 +86,7 @@ export function speciesOf(seed: string): string {
 }
 
 /** Square avatar of `size` px with a status dot at the bottom-right corner. */
-export function avatarSvg(seed: string, size: number, status: Status): { source: string; alt: string } {
+export function avatarSvg(seed: string, size: number, status: Status, waved = false): { source: string; alt: string } {
   const { kind, sp, colors, bg } = draw(seed)
   const px = size / 12
   const cells: string[] = []
@@ -98,12 +98,21 @@ export function avatarSvg(seed: string, size: number, status: Status): { source:
   )
   const rad = size * 0.16
   const c = (size - rad - 2).toFixed(2)
+  const hand: string[] = []
+  if (waved) {
+    ['..X.X.X.', '..X.X.XX', '..XXXXXX', 'X.XXXXXX', 'XXXXXXXX', '.XXXXXXX', '..XXXXX.', '...XXX..'].forEach((row, y) => {
+      [...row].forEach((cell, x) => {
+        if (cell === 'X') hand.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="#F2C27A"/>`)
+      })
+    })
+  }
   const source =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
     `<clipPath id="a"><rect width="${size}" height="${size}" rx="${(size * 0.22).toFixed(2)}"/></clipPath>` +
     `<g clip-path="url(#a)" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="${bg}"/>${cells.join('')}</g>` +
     `<circle cx="${c}" cy="${c}" r="${(rad + 2).toFixed(2)}" fill="${PANEL}"/>` +
     `<circle cx="${c}" cy="${c}" r="${rad.toFixed(2)}" fill="${DOT[status]}"/>` +
+    (waved ? `<g shape-rendering="crispEdges">${hand.join('')}</g>` : '') +
     `</svg>`
-  return { source, alt: `${kind} avatar` }
+  return { source, alt: `${kind} avatar${waved ? ', waved' : ''}` }
 }

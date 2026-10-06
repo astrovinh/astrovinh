@@ -11,6 +11,13 @@ const row = (name: string, status: Status = 'live', you = false): Row => ({
 })
 const base = { rows: [] as Row[], paused: false, problem: null as string | null, hasSnapshot: true }
 
+test('presence appends only a handoff hint when at least one waits for you', () => {
+  expect(presenceLine({ ...base, hasHandoff: true })).toBe('Online members \u00b7 nobody right now \u00b7 a handoff for you \u00b7 /team')
+  expect(presenceLine({ ...base, rows: [row('Linh')], paused: true, hasHandoff: true })).toBe(`${presenceLine({ ...base, rows: [row('Linh')], paused: true })} \u00b7 a handoff for you \u00b7 /team`)
+  expect(presenceLine({ ...base, hasHandoff: false })).toBe(presenceLine(base))
+  expect(presenceLine({ ...base, problem: 'offline', hasHandoff: true })).toBe("Online members \u00b7 can't reach the team server, will retry \u00b7 a handoff for you \u00b7 /team")
+})
+
 test('a live teammate is the filled circled initial', () => {
   expect(presenceLine({ ...base, rows: [row('Aki')] })).toBe('Online members \u{1F150}')
   expect(presenceLine({ ...base, rows: [row('aki')] })).toBe('Online members \u{1F150}')

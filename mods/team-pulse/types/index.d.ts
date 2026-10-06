@@ -28,6 +28,8 @@ export type SnapshotSession = {
 // state is missing on an older server, which counted every segment as active.
 export type SnapshotSegment = { session: string; member: string; start: number; end: number; state?: 'working' | 'idle' }
 
+export type Signal = { id: string; kind: 'handoff' | 'wave' | 'win'; from: string; to: string; text: string; at: number }
+
 export type Snapshot = {
   team: string
   now: number
@@ -35,6 +37,7 @@ export type Snapshot = {
   members: { id: string; name: string; status?: string | null; statusAt?: number | null; tz?: string | null }[]
   sessions: SnapshotSession[]
   segments: SnapshotSegment[]
+  signals?: Signal[]
 }
 
 export type Membership = {

@@ -26,13 +26,15 @@ export function presenceLine(v: {
   paused: boolean
   problem: string | null
   hasSnapshot: boolean
+  hasHandoff?: boolean
 }): string | undefined {
-  if (v.problem) return `${LABEL} ${DOT} can't reach the team server, will retry`
+  const handoff = v.hasHandoff ? ` ${DOT} a handoff for you ${DOT} /team` : ''
+  if (v.problem) return `${LABEL} ${DOT} can't reach the team server, will retry${handoff}`
   if (!v.hasSnapshot) return undefined
   const paused = v.paused ? ` ${DOT} sharing paused` : ''
   const online = v.rows.filter(r => !r.you && (r.status === 'live' || r.status === 'idle'))
-  if (!online.length) return `${LABEL} ${DOT} nobody right now${paused}`
+  if (!online.length) return `${LABEL} ${DOT} nobody right now${paused}${handoff}`
   const shown = online.slice(0, MAX_NAMES).map(r => glyph(r.name, r.status === 'live'))
   const more = online.length > MAX_NAMES ? [`+${online.length - MAX_NAMES}`] : []
-  return `${LABEL} ${[...shown, ...more].join(' ')}${paused}`
+  return `${LABEL} ${[...shown, ...more].join(' ')}${paused}${handoff}`
 }
