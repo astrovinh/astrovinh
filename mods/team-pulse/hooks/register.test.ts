@@ -1,7 +1,10 @@
 import { test, expect, mock } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, PaneCloseInput, PaneCloseOrigin, UiPane } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 import type { Membership, Signal, Snapshot } from '../types'
 import { clockLabel } from './clock'
+import { PANE, READ_MS } from './config'
+import { register } from './register'
 
 const NOW = Date.UTC(2026, 9, 6, 15, 40)
 const prepare = (on: On, tz: string | null = null, error: string | null = null) => {
@@ -98,11 +101,15 @@ const deviceSetup = (on: On, current: Membership | null = null, opts: { error?: 
   const key = random(32)
   const joined = { teamId, team: 'Murror', memberId: 'm1', key, name: 'Linh N', isAdmin: opts.isAdmin ?? false }
   const store: Record<string, unknown> = { server: 'https://pulse.test', ...(current ? { membership: current, panelPinned: true } : {}) }
-  on('store.get', (_, e) => ({ value: store[e.key] }))
+  const failures = { store: false, open: false, close: false }
+  on('store.get', (_, e) => {
+    if (e.key === 'panelPinned' && failures.store) throw new Error('Store unavailable')
+    return { value: store[e.key] }
+  })
   on('store.set', (_, e) => { store[e.key] = e.value; return { value: undefined } })
   on('store.delete', (_, e) => { delete store[e.key]; return { value: undefined } })
   on('store.keys', () => ({ value: Object.keys(store) }))
-  mock.clock(on, { now: NOW })
+  const clock = mock.clock(on, { now: NOW })
   const state: Record<string, unknown> = { snapshot: null, fetchedAt: 0, problem: null, expanded: [] }
   on('state.get', (_, e) => ({ value: { value: state[e.key], version: 1 }, version: 1 }))
   on('state.set', (_, e) => {
@@ -110,9 +117,28 @@ const deviceSetup = (on: On, current: Membership | null = null, opts: { error?: 
     return { value: { isSet: true, version: 2 }, version: 2 }
   })
   const actions: string[] = []
+  const panes: UiPane[] = []
+  const opens: { id: string; title: string | undefined }[] = []
+  const closes: { id: string }[] = []
   on('ui.status', () => ({ value: undefined }))
-  on('ui.open', () => { actions.push('open'); return { value: { isPlaced: true } } })
-  on('ui.close', () => { actions.push('close'); return { value: undefined } })
+  on('ui.panes', () => ({ value: panes }))
+  on('ui.open', (_, e) => {
+    if (failures.open) throw new Error('Open unavailable')
+    actions.push('open')
+    opens.push({ id: e.id, title: e.title })
+    const pane = panes.find(p => p.id === e.id)
+    if (pane) pane.isPlaced = true
+    else panes.push({ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true })
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', (_, e) => {
+    if (failures.close) throw new Error('Close unavailable')
+    actions.push('close')
+    closes.push({ id: e.id })
+    const index = panes.findIndex(p => p.id === e.id)
+    if (index !== -1) panes.splice(index, 1)
+    return { value: undefined }
+  })
   on('session.usage', () => ({ value: { rateLimits: [], startedAt: NOW, context: { tokens: 0, window: 200_000 } } }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: 'main', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   const requests: { method: string | undefined; url: string; body: any; authorization: string | undefined }[] = []
@@ -128,9 +154,171 @@ const deviceSetup = (on: On, current: Membership | null = null, opts: { error?: 
     if (e.init?.method === 'PUT') return response({ ok: true })
     return response({ team: 'Murror', now: NOW, you: 'm1', members: [{ id: 'm1', name: joined.name }], sessions: [], segments: [] })
   })
-  return { code, secret, joined, requests, actions, store }
+  return { code, secret, joined, requests, actions, store, state, clock, panes, opens, closes, failures }
 }
 const onTeam = (): Membership => ({ server: 'https://pulse.test', teamId: 'abcdefghij', memberId: 'm1', key: '', name: 'Linh', team: 'Murror', isAdmin: false })
+
+const sessionStart = { cwd: '/tmp/team-pulse-test', surface: 'terminal' as const, isInteractive: true }
+const teamPane = (isPlaced: boolean): UiPane => ({ id: PANE, title: 'Team', isShown: isPlaced, isFocused: false, isPlaced })
+const panelSetup = (on: On, hasMembership = true) => {
+  const p = deviceSetup(on, hasMembership ? onTeam() : null)
+  p.store.panelPinned = false
+  p.store.paused = true
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  return p
+}
+const startPanelSession = async ($: Engine, p: ReturnType<typeof panelSetup>) => {
+  await $.session.start(sessionStart)
+  await p.clock.settle()
+  p.actions.length = 0
+  p.requests.length = 0
+  p.opens.length = 0
+  p.closes.length = 0
+}
+
+// The kit cannot raise ui.close directly. Capture the real hook to deliver the engine's stamped origin.
+let closeHook: ($: any, e: PaneCloseInput, next: (e: PaneCloseInput) => Promise<{ value: undefined }>) => unknown
+register(((event: string, hook: unknown) => {
+  if (event === 'ui.close') closeHook = hook as typeof closeHook
+}) as On, {})
+const deliverClose = async (p: ReturnType<typeof panelSetup>, kind: PaneCloseOrigin['kind']) => {
+  const context = {
+    store: {
+      get: async (key: string) => p.store[key],
+      set: async (key: string, value: unknown) => { p.store[key] = value }
+    }
+  }
+  await closeHook(context, { id: PANE, origin: { kind } }, async () => ({ value: undefined }))
+}
+
+test('one read timer tick opens a closed pane when another session pins the panel and refreshes it', async ($, on) => {
+  const p = panelSetup(on)
+  await startPanelSession($, p)
+  p.store.panelPinned = true
+  p.state.snapshot = null
+  await p.clock.advance(READ_MS)
+  expect(p.opens).toEqual([{ id: PANE, title: 'Team' }])
+  expect(p.actions).toEqual(['open', 'fetch'])
+  expect(p.state.snapshot).toBeDefined()
+  expect(p.state.snapshot).not.toBeNull()
+  expect(p.store.panelPinned).toBe(true)
+})
+
+test('one read timer tick closes a shown pane when another session un-pins the panel', async ($, on) => {
+  const p = panelSetup(on)
+  await startPanelSession($, p)
+  p.panes.push(teamPane(true))
+  await p.clock.advance(READ_MS)
+  expect(p.closes).toEqual([{ id: PANE }])
+  await deliverClose(p, 'plugin')
+  expect(p.store.panelPinned).toBe(false)
+})
+
+for (const pinned of [false, true]) {
+  test(`a plugin close event keeps panelPinned ${pinned}`, async ($, on) => {
+    const p = panelSetup(on)
+    p.store.panelPinned = pinned
+    p.panes.push(teamPane(true))
+    await deliverClose(p, 'plugin')
+    expect(p.store.panelPinned).toBe(pinned)
+  })
+}
+
+test('a person closing the Team pane un-pins it', async ($, on) => {
+  const p = panelSetup(on)
+  p.store.panelPinned = true
+  p.panes.push(teamPane(true))
+  await deliverClose(p, 'person')
+  expect(p.store.panelPinned).toBe(false)
+})
+
+for (const pinned of [true, false]) {
+  test(`a read timer tick without membership does not ${pinned ? 'open' : 'close'} the panel`, async ($, on) => {
+    const p = panelSetup(on, false)
+    await startPanelSession($, p)
+    p.store.panelPinned = pinned
+    if (!pinned) p.panes.push(teamPane(true))
+    await p.clock.advance(READ_MS)
+    expect(p.opens).toHaveLength(0)
+    expect(p.closes).toHaveLength(0)
+  })
+}
+
+test('read timer ticks leave a pinned waiting pane for the engine to seat and refresh every second tick', async ($, on) => {
+  const p = panelSetup(on)
+  await startPanelSession($, p)
+  p.store.panelPinned = true
+  p.panes.push(teamPane(false))
+  await p.clock.advance(READ_MS * 4)
+  expect(p.opens).toHaveLength(0)
+  expect(p.closes).toHaveLength(0)
+  expect(p.requests.map(r => r.method)).toEqual(['GET', 'GET'])
+})
+
+test('a read timer tick closes a waiting pane when the panel is not pinned', async ($, on) => {
+  const p = panelSetup(on)
+  await startPanelSession($, p)
+  p.panes.push(teamPane(false))
+  await p.clock.advance(READ_MS)
+  expect(p.closes).toEqual([{ id: PANE }])
+})
+
+test('a shown pinned panel refreshes on every read timer tick without reopening', async ($, on) => {
+  const p = panelSetup(on)
+  await startPanelSession($, p)
+  p.store.panelPinned = true
+  p.panes.push(teamPane(true))
+  await p.clock.advance(READ_MS * 4)
+  expect(p.opens).toHaveLength(0)
+  expect(p.closes).toHaveLength(0)
+  expect(p.requests.map(r => r.method)).toEqual(['GET', 'GET', 'GET', 'GET'])
+})
+
+test('a closed un-pinned panel refreshes on every second read timer tick', async ($, on) => {
+  const p = panelSetup(on)
+  await startPanelSession($, p)
+  await p.clock.advance(READ_MS * 4)
+  expect(p.opens).toHaveLength(0)
+  expect(p.closes).toHaveLength(0)
+  expect(p.requests.map(r => r.method)).toEqual(['GET', 'GET'])
+})
+
+for (const failure of ['store', 'open', 'close'] as const) {
+  test(`a follow ${failure} failure does not stop later read timer ticks`, async ($, on) => {
+    const p = panelSetup(on)
+    await startPanelSession($, p)
+    p.store.panelPinned = failure !== 'close'
+    if (failure === 'close') p.panes.push(teamPane(true))
+    p.failures[failure] = true
+    await p.clock.advance(READ_MS)
+    expect(p.opens).toHaveLength(0)
+    expect(p.closes).toHaveLength(0)
+    p.failures[failure] = false
+    await p.clock.advance(READ_MS)
+    if (failure === 'close') expect(p.closes).toEqual([{ id: PANE }])
+    else expect(p.opens).toEqual([{ id: PANE, title: 'Team' }])
+  })
+}
+
+test('session start still reopens a pinned panel', async ($, on) => {
+  const p = panelSetup(on)
+  p.store.panelPinned = true
+  await $.session.start(sessionStart)
+  await p.clock.settle()
+  expect(p.opens).toEqual([{ id: PANE, title: 'Team' }])
+})
+
+test('team still opens a waiting pane on request and toggles the shown panel closed', async ($, on) => {
+  const p = panelSetup(on)
+  p.panes.push(teamPane(false))
+  expect((await $.command.run({ ...command, args: '' })).text).toBe('Team panel opened.')
+  expect(p.store.panelPinned).toBe(true)
+  expect((await $.command.run({ ...command, args: '' })).text).toBe('Team panel closed.')
+  expect(p.store.panelPinned).toBe(false)
+  expect(p.opens).toEqual([{ id: PANE, title: 'Team' }])
+  expect(p.closes).toEqual([{ id: PANE }])
+})
 
 test('team device code replies with a one-use code without storing it', async ($, on) => {
   const current = onTeam()

@@ -6,6 +6,7 @@ See who on the team is working in Claude Code, what they are working on, and the
 
 Already installed? Update in two steps: run the install command below again, then open a new Claude Code session.
 
+- **The panel follows you:** type `/team` in one session and every Claude Code session you have open shows it within about 30 seconds. Close it by hand and it closes everywhere.
 - **A calmer panel:** everyone keeps the same place (you first, then the order people joined), so nobody jumps around. Each row shows the 12h strip; press **More** for branch, limits and Claude activity.
 - **Local clocks:** `/team clock on` shows your local time next to your name, like "VN 10:40 PM". It is off until you turn it on; `/team clock off` hides it.
 - **One you across Macs:** run `/team device code` on a Mac that is already on the team, then `/team device join <code>` on the other one. Both Macs show as one row. Already joined twice? See "Using more than one Mac" below.
@@ -55,7 +56,7 @@ Already joined twice? On the extra Mac, run `/team leave`, then `/team device jo
 
 | You type or see | What it does |
 |---|---|
-| `/team` | Opens or closes the team panel. It stays open in new sessions until you close it. |
+| `/team` | Opens or closes the team panel in every Claude Code session you have open (others follow within about 30 seconds). It stays open in new sessions until you close it. |
 | The line under your prompt, like "Online members Ⓛ 🅜" | One circled letter per teammate who is online, the first letter of their name. A filled letter means working. An outlined letter means idle. |
 | `/team name <new name>` | Changes the name your teammates see. |
 | `/team status <note>` | Sets an away note that shows under your name. It stays until you clear it. |

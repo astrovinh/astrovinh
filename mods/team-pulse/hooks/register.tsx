@@ -9,7 +9,7 @@ import { COMMAND, DEFAULT_SERVER, HEARTBEAT_MS, PANE, READ_MS, TIMEOUT_MS } from
 import { cleanLine, fallbackLine, lineDue, lineRequest } from './line'
 import { cleanName } from './names'
 import { drawPanel } from './panel'
-import { paneStateOf, pinnedAfterClose } from './pin'
+import { followAction, paneStateOf, pinnedAfterClose } from './pin'
 import { presenceLine } from './presence'
 import { buildRows } from './rows'
 import { buildHeartbeat, joinDecision, sessionIdFor } from './share'
@@ -158,6 +158,19 @@ async function paneState($: any) {
     return paneStateOf(await $.ui.panes(), PANE)
   } catch {
     return 'closed'
+  }
+}
+
+/** Follows the panel pin shared by every open session on this Mac. */
+async function follow($: any) {
+  try {
+    if (!(await membership($))) return
+    const pinned = (await $.store.get('panelPinned')) === true
+    const action = followAction(pinned, await paneState($))
+    if (action === 'open') await $.ui.open({ id: PANE, title: 'Team' })
+    else if (action === 'close') await $.ui.close({ id: PANE })
+  } catch {
+    // A store or UI failure must not stop this session's read timer.
   }
 }
 
@@ -375,6 +388,7 @@ export const register: Register = on => {
     beatTimer = $.clock.every(HEARTBEAT_MS, () => void beat($).catch(() => {}))
     // The panel needs fresh reads every tick; the presence line alone is fine with every second one.
     readTimer = $.clock.every(READ_MS, async () => {
+      await follow($)
       readTick += 1
       if (readTick % 2 === 0 || (await paneState($)) === 'shown') void refresh($).catch(() => {})
     })
