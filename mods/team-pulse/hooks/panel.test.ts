@@ -1,6 +1,7 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Snapshot } from '../types'
+import { STRIP_SVG_W } from './draw'
 
 const NOW = 1_800_000_000_000
 const view: Snapshot = {
@@ -105,6 +106,44 @@ const signalView: Snapshot = {
   ]
 }
 const target = (surface: 'desktop' | 'terminal') => ({ plugin: 'murror', surface, component: 'Pane' as const, requestId: 'team', props: { title: 'Team', isFocused: true, bodyColumns: 80, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 50 }, view: {} } })
+
+for (const open of [false, true]) {
+  test(`the ${open ? 'Less' : 'More'} button stays after the shrinkable strip in the same row`, async ($, on) => {
+    prepare(on, view, open)
+    for (const surface of ['desktop', 'terminal'] as const) {
+      const pane = target(surface)
+      const ui = await $.ui.mount({ ...pane, props: { ...pane.props, bodyColumns: 40 } })
+      const line = (await ui.findAll({ type: 'Box' })).find(box =>
+        box.children.length === 2 &&
+        JSON.stringify(box.children[0]).includes(surface === 'desktop' ? 'Claude activity in the last 12 hours' : '12h ') &&
+        JSON.stringify(box.children[1]).includes('expand:m1')
+      )
+      expect(line).toBeDefined()
+      expect(line?.children[0]).toMatchObject({ type: 'Box', props: { flexShrink: 1 } })
+      expect(line?.children[1]).toMatchObject({
+        type: 'Box', props: { flexShrink: 0 },
+        children: [{ type: 'Button', props: { key: 'expand:m1', plain: true, label: open ? 'Less' : 'More' } }]
+      })
+      if (surface === 'desktop') {
+        expect(line?.children[0]).toMatchObject({ children: [{ type: 'Svg', props: { width: STRIP_SVG_W } }] })
+      }
+      await ui.unmount()
+    }
+  })
+}
+
+test('the terminal twenty-cell strip plus More fits in forty columns', async ($, on) => {
+  prepare(on)
+  const pane = target('terminal')
+  const ui = await $.ui.mount({ ...pane, props: { ...pane.props, bodyColumns: 40 } })
+  const strip = await ui.find({ type: 'Text', text: '12h ' })
+  const button = await ui.find({ key: 'expand:m1' })
+  expect(strip?.text).toMatch(/^12h [\u2500\u2501\u2504]{20} $/)
+  expect(button?.text).toBe('More')
+  // Include the row's two columns of padding on each side.
+  expect(4 + strip!.text.length + button!.text.length).toBeLessThanOrEqual(40)
+  await ui.unmount()
+})
 
 test('the panel shows the two newest addressed handoffs under the header, then more and the win shelf', async ($, on) => {
   prepare(on, signalView)

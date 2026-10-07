@@ -4,7 +4,7 @@ import type { Piece } from './strip'
 
 export const ROW_SVG_W = 300
 export const ROW_SVG_H = 30
-export const STRIP_SVG_W = 264
+export const STRIP_SVG_W = 210
 export const STRIP_SVG_H = 16
 const LABEL_W = 40
 const VALUE_W = 36
@@ -40,7 +40,7 @@ function bar(p: number | null): string {
 }
 
 function stripTrack(pieces: Piece[]): string {
-  const w = BAR_W - 8
+  const w = STRIP_SVG_W - LABEL_W - 8
   return (
     `<rect y="-1" width="${w}" height="6" rx="3" fill="${TRACK}"/>` +
     pieces

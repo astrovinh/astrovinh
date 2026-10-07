@@ -121,13 +121,17 @@ export function drawPanel(
             ) : (
               <Text dimColor>Not running Claude Code</Text>
             )}
-            <Box alignItems="center" marginTop={1}>
-              {surface === 'desktop' && Svg ? (
-                <Svg {...stripSvg(st.pieces)} width={STRIP_SVG_W} height={STRIP_SVG_H} />
-              ) : (
-                <Text dimColor color={QUIET}>{`12h ${textStrip(st.pieces, 20)} `}</Text>
-              )}
-              <Button key={`expand:${r.id}`} plain onPress={() => v.onExpand(r.id)} label={open ? 'Less' : 'More'} />
+            <Box alignItems="center" marginTop={1} gap={surface === 'desktop' && Svg ? 1 : 0}>
+              <Box flexShrink={1} minWidth={0}>
+                {surface === 'desktop' && Svg ? (
+                  <Svg {...stripSvg(st.pieces)} width={STRIP_SVG_W} height={STRIP_SVG_H} />
+                ) : (
+                  <Text dimColor color={QUIET}>{`12h ${textStrip(st.pieces, 20)} `}</Text>
+                )}
+              </Box>
+              <Box flexShrink={0}>
+                <Button key={`expand:${r.id}`} plain onPress={() => v.onExpand(r.id)} label={open ? 'Less' : 'More'} />
+              </Box>
             </Box>
             {open ? (
               <Box flexDirection="column">

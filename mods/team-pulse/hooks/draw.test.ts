@@ -1,6 +1,6 @@
 import type { Piece } from './strip'
 import { test, expect } from 'claude-code/testing'
-import { bubbleSvg, esc, noteWidth, rowSvg, ROW_SVG_W, severity, stripSvg, textBar, textStrip } from './draw'
+import { bubbleSvg, esc, noteWidth, rowSvg, ROW_SVG_W, severity, STRIP_SVG_W, stripSvg, textBar, textStrip } from './draw'
 test('severity matches usage-bars: green, amber from 60, red from 85', () => {
   expect([severity(10), severity(60), severity(85)]).toEqual(['#9ece6a', '#e0af68', '#f7768e'])
 })
@@ -163,6 +163,31 @@ test('the compact strip has a 12h label without usage bars or an hours number', 
   expect(source.includes('5h') || source.includes('Week') || source.includes('0.0h')).toBe(false)
   expect(source.includes('fill="#AAA69A"')).toBe(true)
   expect(alt).toBe('Claude activity in the last 12 hours')
+})
+
+test('the strip leaves room for the More button inside the bar width', () => {
+  const { source } = stripSvg([])
+  expect(Number(source.match(/^<svg[^>]* width="(\d+)"/)?.[1])).toBe(STRIP_SVG_W)
+  expect(STRIP_SVG_W + 8 + 44).toBeLessThanOrEqual(ROW_SVG_W)
+})
+
+test('the strip label and track keep their left alignment with the usage bars', () => {
+  const { source } = stripSvg([])
+  const bars = rowSvg({ fiveHour: 64, week: 41, name: 'Linh' }).source
+  expect(source.includes('<text x="0" y="11"')).toBe(true)
+  const stripX = Number(source.match(/<g transform="translate\((\d+) /)?.[1])
+  const barX = Number(bars.match(/<g transform="translate\((\d+) /)?.[1])
+  expect(stripX).toBe(40)
+  expect(stripX).toBe(barX)
+})
+
+test('the entire activity track fits inside the compact strip SVG', () => {
+  const { source } = stripSvg([{ from: 0.5, to: 1, active: true, running: true }])
+  const trackX = Number(source.match(/<g transform="translate\((\d+) /)?.[1])
+  const trackWidth = Number(source.match(/<rect y="-1" width="(\d+)"/)?.[1])
+  expect(trackWidth).toBe(STRIP_SVG_W - trackX - 8)
+  const piece = source.match(/<rect x="([\d.]+)" y="-1" width="([\d.]+)"/)
+  expect(trackX + Number(piece?.[1]) + Number(piece?.[2])).toBeLessThanOrEqual(STRIP_SVG_W)
 })
 
 test('the terminal strip keeps active, idle and quiet time in order', () => {
