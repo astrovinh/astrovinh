@@ -6,6 +6,7 @@ See who on the team is working in Claude Code, what they are working on, and the
 
 Already installed? Update in two steps: run the install command below again, then type `/reload-plugins` in each Claude Code session you have open (or open a new session).
 
+- **The team in your browser:** type `/team web` for your team's page link, open it, and type the code it shows as `/team web <code>`. That browser can see the team for 30 days, read-only, even with Claude Code closed. `/team web revoke` signs out every browser you connected.
 - **The panel follows you:** type `/team` in one session and every Claude Code session you have open shows it within about 30 seconds. Close it by hand and it closes everywhere.
 - **A calmer panel:** everyone keeps the same place (you first, then the order people joined), so nobody jumps around. Each row shows the 12h strip; press **More** for branch, limits and Claude activity.
 - **Local clocks:** `/team clock on` shows your local time next to your name, like "VN 10:40 PM". It is off until you turn it on; `/team clock off` hides it.
@@ -67,6 +68,8 @@ Already joined twice? On the extra Mac, run `/team leave`, then `/team device jo
 | `/team clock <IANA>` | Shares a named time zone, for example `Asia/Ho_Chi_Minh` or `America/Los_Angeles`. |
 | `/team say <text>` | Writes your own "working on" line. |
 | `/team say` | Goes back to the automatic line. |
+| `/team web` | Gives your team page link for a browser. Open it, then type the code it shows as `/team web <code>` (works once, for 10 minutes). |
+| `/team web revoke` | Signs out every browser you connected. |
 | `/team pause` | Stops sharing from this Mac. |
 | `/team resume` | Starts sharing again. |
 
@@ -92,6 +95,7 @@ Use `/team signals off` to hide waves and wins on this Mac, and `/team signals o
 - The time of your last activity in each session.
 - Your away note, if you set one.
 - Your time zone, only if you turn it on.
+- If you connect a browser: that it is connected and when its 30 days end. Opening the page never shows you as active.
 - Handoff notes (only you and the receiver see them), waves and wins (the whole team sees them).
 
 This is sent every 60 seconds while a session is open. Your own row in `/team` shows exactly what is shared about you.
