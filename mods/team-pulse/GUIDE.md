@@ -4,7 +4,7 @@ See who on the team is working in Claude Code, what they are working on, and the
 
 ## What's new (Oct 6)
 
-Already installed? Update in two steps: run the install command below again, then open a new Claude Code session.
+Already installed? Update in two steps: run the install command below again, then type `/reload-plugins` in each Claude Code session you have open (or open a new session).
 
 - **The panel follows you:** type `/team` in one session and every Claude Code session you have open shows it within about 30 seconds. Close it by hand and it closes everywhere.
 - **A calmer panel:** everyone keeps the same place (you first, then the order people joined), so nobody jumps around. Each row shows the 12h strip; press **More** for branch, limits and Claude activity.
@@ -37,7 +37,7 @@ Already installed? Update in two steps: run the install command below again, the
 curl -fsSL https://raw.githubusercontent.com/astrovinh/astrovinh/claude/usage-bars-mod/mods/team-pulse/install.sh | bash
 ```
 
-2. Open a new Claude Code session. If you don't see the team line under your prompt, quit Claude Code and open it again.
+2. Type `/reload-plugins` in a Claude Code session you have open, or open a new session. If you don't see the team line under your prompt, quit Claude Code and open it again.
 3. Type `/team join` followed by the code and your name, without the `< >`. For example:
 
 ```
@@ -107,7 +107,7 @@ Kept for 7 days. `/team leave` disconnects this Mac. Leaving from your last Mac 
 ## If something looks wrong
 
 **I don't see the panel or the line.**
-Open a new Claude Code session. Mods load when a session starts.
+Type `/reload-plugins`, or open a new Claude Code session. Mods load when a session starts or reloads.
 
 **My line shows my branch, or says "Working in Claude Code", instead of what I'm doing.**
 Send a normal request. Slash commands do not count. A greeting gives no summary.
