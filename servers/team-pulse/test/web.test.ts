@@ -314,7 +314,7 @@ describe('read-only browser sign-in', () => {
     expect(await inside(teamId, t => [t.sql.exec('SELECT COUNT(*) AS n FROM web_challenges').one().n, t.sql.exec('SELECT COUNT(*) AS n FROM web_sessions').one().n])).toEqual([0, 0])
   })
 
-  it('only snapshot returns team data; page and asset obey CSP and all web replies are no-store', async () => {
+  it('only authenticated reads return team data; page and asset obey CSP and all web replies are no-store', async () => {
     const { teamId, linh } = await newTeam()
     const browser = await connect(teamId, linh.key)
     const page = await web('GET', `/web/${teamId}`, { cookie: browser.cookie })
@@ -328,7 +328,8 @@ describe('read-only browser sign-in', () => {
     const asset = await web('GET', '/web/assets/app.js')
     expect(asset.status).toBe(200)
     expect(asset.headers.get('content-type')).toContain('javascript')
-    for (const fragment of ['/challenge', '/exchange', '/snapshot', '/signout', 'textContent', '3000', 'expiresAt']) expect(asset.text).toContain(fragment)
+    expect(asset.headers.get('content-security-policy')).toBe(CSP)
+    for (const fragment of ['/challenge', '/exchange', '/view', '/signout', 'textContent', '3000', 'expiresAt']) expect(asset.text).toContain(fragment)
     const error = await web('GET', `/web/${teamId}/unknown`)
     const malformed = await web('POST', `/web/${teamId}/challenge`, { raw: '{' })
     const tooLarge = await web('POST', `/web/${teamId}/challenge`, { raw: 'a'.repeat(2049) })
@@ -355,5 +356,169 @@ describe('read-only browser sign-in', () => {
       expect(r.text.includes(linh.key)).toBe(false)
       expect(r.cookies.join(';').includes(linh.key)).toBe(false)
     }
+  })
+})
+
+describe('browser team view', () => {
+  const view = (teamId: string, cookie = '', now = T0) => web('GET', `/web/${teamId}/view`, { cookie, now })
+
+  it('keeps the 12h strip at natural width aligned left, shrinking only for narrower rows', async () => {
+    const { teamId } = await newTeam()
+    const page = await web('GET', `/web/${teamId}`)
+    expect(page.status).toBe(200)
+    const stripCss = page.text.match(/\.strip\s+svg\s*\{([^}]+)\}/)?.[1]
+    expect(stripCss).toBeDefined()
+    expect(stripCss).not.toMatch(/(?:^|;)\s*width\s*:\s*100%\s*(?:;|$)/)
+    expect(stripCss).toMatch(/(?:^|;)\s*width\s*:\s*auto\s*(?:;|$)/)
+    expect(stripCss).toMatch(/(?:^|;)\s*max-width\s*:\s*100%\s*(?:;|$)/)
+    expect(stripCss).toMatch(/(?:^|;)\s*display\s*:\s*block\s*(?:;|$)/)
+    expect(stripCss).toMatch(/(?:^|;)\s*height\s*:\s*16px\s*(?:;|$)/)
+  })
+
+  it('the view route requires a valid web session, including expiry and revocation', async () => {
+    const { teamId, linh } = await newTeam()
+    expect((await view(teamId)).status).toBe(403)
+    expect((await view(teamId, `__Host-tpw_${teamId}=${linh.key}`)).status).toBe(403)
+    const browser = await connect(teamId, linh.key)
+    expect((await view(teamId, `${browser.cookie}; ${browser.cookie}`)).status).toBe(403)
+    const r = await view(teamId, browser.cookie)
+    expect(r.status).toBe(200)
+    expect(r.headers.get('content-type')).toContain('text/html')
+    expect(r.headers.get('content-security-policy')).toBe(CSP)
+    expect(r.headers.get('cache-control')).toBe('no-store')
+    expect(r.text).not.toContain(linh.key)
+    expect(r.text).not.toContain(browser.cookie.split('=')[1]!)
+    expect(r.text).not.toContain('<script')
+    expect((await view(teamId, browser.cookie, T0 + DAYS_30)).status).toBe(403)
+    await api('POST', `/teams/${teamId}/web/revoke`, { key: linh.key })
+    expect((await view(teamId, browser.cookie)).status).toBe(403)
+  })
+
+  it('the view and snapshot routes share the same 4/min per member limit', async () => {
+    const { teamId, linh } = await newTeam()
+    const a = await connect(teamId, linh.key)
+    const b = await connect(teamId, linh.key)
+    expect((await view(teamId, a.cookie)).status).toBe(200)
+    expect((await snapshot(teamId, b.cookie)).status).toBe(200)
+    expect((await view(teamId, b.cookie)).status).toBe(200)
+    expect((await snapshot(teamId, a.cookie)).status).toBe(200)
+    expect((await view(teamId, a.cookie)).status).toBe(429)
+    expect((await api('GET', `/teams/${teamId}`, { key: linh.key })).status).toBe(200)
+    expect((await view(teamId, a.cookie, T0 + 60_000)).status).toBe(200)
+  })
+
+  it("the view contains no other member's private handoff", async () => {
+    const { teamId, code, admin, linh } = await newTeam()
+    const mona = (await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'Mona' } })).body
+    await api('POST', `/teams/${teamId}/signals`, { key: admin.key, body: { kind: 'handoff', to: mona.memberId, text: 'Private note for Mona' } })
+    await api('POST', `/teams/${teamId}/signals`, { key: mona.key, body: { kind: 'handoff', to: linh.memberId, text: 'For Linh' } })
+    const browser = await connect(teamId, linh.key)
+    // Seed the shared cache as the sender: the next caller must still get their own filtered view.
+    await api('GET', `/teams/${teamId}`, { key: admin.key })
+    // Observe the real authenticated snapshot handed to the HTML renderer. The inbox helper
+    // also filters recipients, so check the boundary as well as visible HTML (defense in depth).
+    await inside(teamId, t => {
+      const read = t.snapshotFor.bind(t)
+      t.snapshotFor = (member: string, now: number) => {
+        const result = read(member, now)
+        t.browserRenderInput = result
+        return result
+      }
+    })
+    const r = await view(teamId, browser.cookie)
+    expect(r.status).toBe(200)
+    expect(r.text).toContain('For Linh')
+    expect(r.text).not.toContain('Private note for Mona')
+    const input = await inside(teamId, t => t.browserRenderInput)
+    expect(input.you).toBe(linh.memberId)
+    expect(JSON.stringify(input.signals)).not.toContain('Private note for Mona')
+    expect(r.text).toContain('Take or dismiss it in /team')
+    expect(r.text).not.toMatch(/>Take<|>Dismiss</)
+  })
+
+  it('escapes the hostile name <img src=x onerror=alert(1)> into inert text', async () => {
+    const { teamId, linh } = await newTeam()
+    const hostile = '<img src=x onerror=alert(1)>'
+    await api('PUT', `/teams/${teamId}/name`, { key: linh.key, body: { name: hostile } })
+    const browser = await connect(teamId, linh.key)
+    const r = await view(teamId, browser.cookie)
+    expect(r.status).toBe(200)
+    expect(r.text).toContain(`<b class="name">&lt;img src=x onerror=alert(1)&gt;`)
+    expect(r.text).not.toContain(hostile)
+  })
+
+  it('escapes team, work, branch, away note, handoff and win text', async () => {
+    const created = await api('POST', '/teams', { body: { team: '<b>Team</b>', name: 'Caller' } })
+    const [teamId, code] = created.body.joinCode.split('.')
+    const other = (await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'Other' } })).body
+    await api('PUT', `/teams/${teamId}/sessions/mac`, { key: created.body.key, body: { line: '<b>Work</b>', branch: '<b>Branch</b>', state: 'working' } })
+    await api('PUT', `/teams/${teamId}/status`, { key: created.body.key, body: { status: '<b>Note</b>' } })
+    await api('POST', `/teams/${teamId}/signals`, { key: other.key, body: { kind: 'handoff', to: created.body.memberId, text: '<b>Handoff</b>' } })
+    await api('POST', `/teams/${teamId}/signals`, { key: other.key, body: { kind: 'win', text: '<b>Win</b>' } })
+    const browser = await connect(teamId, created.body.key)
+    const r = await view(teamId, browser.cookie)
+    for (const field of ['Team', 'Work', 'Branch', 'Note', 'Handoff', 'Win']) {
+      expect(r.text).toContain(`&lt;b&gt;${field}&lt;/b&gt;`)
+      expect(r.text).not.toContain(`<b>${field}</b>`)
+    }
+  })
+
+  it('shows you only on the caller row and keeps you first followed by join order', async () => {
+    const { teamId, code, admin, linh } = await newTeam()
+    const mona = (await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'Mona' } })).body
+    const browser = await connect(teamId, linh.key)
+    const r = await view(teamId, browser.cookie)
+    expect([...r.text.matchAll(/data-member="([^"]+)"/g)].map(m => m[1])).toEqual([linh.memberId, admin.memberId, mona.memberId])
+    expect(r.text.match(/\u00b7 you/g)).toHaveLength(1)
+    expect(r.text).toContain('<b class="name">Linh <span class="you">\u00b7 you</span></b>')
+    expect(r.text).toContain('No one else is working right now')
+  })
+
+  it('two reads within the shared 30 s view have identical content and never write activity', async () => {
+    const { teamId, linh } = await newTeam()
+    const browser = await connect(teamId, linh.key)
+    await api('PUT', `/teams/${teamId}/sessions/mac`, { key: linh.key, body: { line: 'first', state: 'working' } })
+    const first = await view(teamId, browser.cookie, T0 + 1_000)
+    await api('PUT', `/teams/${teamId}/sessions/mac`, { key: linh.key, body: { line: 'second', state: 'working' }, now: T0 + 2_000 })
+    const before = await inside(teamId, t => [t.sql.exec('SELECT * FROM sessions').toArray(), t.sql.exec('SELECT * FROM segments').toArray()])
+    const second = await view(teamId, browser.cookie, T0 + 29_000)
+    expect(first.status).toBe(200)
+    expect(second.text).toBe(first.text)
+    expect(second.text).toContain('first')
+    expect(second.text).not.toContain('second')
+    const fresh = await view(teamId, browser.cookie, T0 + 31_000)
+    expect(fresh.text).toContain('second')
+    expect(await inside(teamId, t => [t.sql.exec('SELECT * FROM sessions').toArray(), t.sql.exec('SELECT * FROM segments').toArray()])).toEqual(before)
+  })
+
+  it('renders capped handoffs, the newest win, waves, clocks and panel details', async () => {
+    const { teamId, code, admin, linh } = await newTeam()
+    const mona = (await api('POST', `/teams/${teamId}/join`, { body: { code, name: 'Mona' } })).body
+    for (let n = 0; n < 3; n++) {
+      await api('POST', `/teams/${teamId}/signals`, { key: admin.key, body: { kind: 'handoff', to: linh.memberId, text: `Review ${n}` }, now: T0 + n * 60_000 })
+    }
+    await api('POST', `/teams/${teamId}/signals`, { key: admin.key, body: { kind: 'win', text: 'Older win' }, now: T0 })
+    await api('POST', `/teams/${teamId}/signals`, { key: mona.key, body: { kind: 'win', text: 'Newest win' }, now: T0 + 60_000 })
+    await api('POST', `/teams/${teamId}/signals`, { key: admin.key, body: { kind: 'wave', to: linh.memberId }, now: T0 + 120_000 })
+    await api('PUT', `/teams/${teamId}/clock`, { key: admin.key, body: { tz: 'Asia/Ho_Chi_Minh' } })
+    for (const [sid, at, line] of [['mac', T0 + 120_000, 'Main work'], ['other', T0 + 60_000, 'Other work']] as const) {
+      await api('PUT', `/teams/${teamId}/sessions/${sid}`, { key: admin.key, body: { branch: 'feature', line, state: 'working', fiveHour: 25, week: 40, startedAt: T0 - 3_600_000 }, now: at })
+    }
+    const browser = await connect(teamId, linh.key, T0 + 120_000)
+    const r = await view(teamId, browser.cookie, T0 + 120_000)
+    expect(r.text.match(/class="card"/g)).toHaveLength(2)
+    expect(r.text).toContain('+1 more')
+    expect(r.text).toContain('Review 2')
+    expect(r.text).not.toContain('Review 0')
+    expect(r.text).toContain('WIN')
+    expect(r.text).toContain('Mona: Newest win')
+    expect(r.text).not.toContain('Older win')
+    expect(r.text).toContain('waved at you')
+    expect(r.text).toContain('%23F2C27A')
+    expect(r.text).toContain('Astro is working right now')
+    expect(r.text).not.toContain('with you')
+    expect(r.text).toContain('VN ')
+    expect(r.text).toContain('<span class="status-text">working</span>')
+    for (const fragment of ['feature \u00b7 1h 2m \u00b7 2 sessions', '25%', '40%', 'Claude activity', 'Other work', 'Not running Claude Code', 'aria-expanded="false"', '>More</button>', 'Read-only', 'data-snapshot-now']) expect(r.text).toContain(fragment)
   })
 })

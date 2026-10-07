@@ -1,7 +1,10 @@
 import { Team } from './team'
 import { randomId } from './util'
+import type { Res } from './util'
 import { cookie, WEB_CSP, WEB_HEADERS, webApp, webPage } from './web'
 import type { WebRes } from './web'
+import { renderWebView } from './web-view'
+import type { Snapshot } from '../../../mods/team-pulse/types'
 
 export { Team }
 
@@ -38,7 +41,7 @@ export default {
       // Check before body parsing or any storage work, including unknown browser POST routes.
       if (req.method === 'POST' && req.headers.get('origin') !== url.origin) return json({ status: 403, body: { error: 'Browser requests must come from this origin' } })
       if (req.method === 'GET' && url.pathname === '/web/assets/app.js') {
-        return new Response(webApp, { headers: { ...WEB_HEADERS, 'content-type': 'text/javascript; charset=utf-8' } })
+        return new Response(webApp, { headers: { ...WEB_HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'content-security-policy': WEB_CSP } })
       }
       if (req.method === 'GET' && parts.length === 2 && TEAM_ID.test(parts[1]!)) {
         return new Response(webPage, { headers: { ...WEB_HEADERS, 'content-type': 'text/html; charset=utf-8', 'content-security-policy': WEB_CSP } })
@@ -64,6 +67,12 @@ export default {
         case 'POST challenge': return json(await t.webChallenge(now))
         case 'POST exchange': return json(await t.webExchange(cookie(req, `__Host-tpc_${teamId}`), now))
         case 'GET snapshot': return json(await t.webSnapshot(cookie(req, `__Host-tpw_${teamId}`), now))
+        case 'GET view': {
+          // Reuse the exact session, caller filtering, cache and rate limit of task 30.
+          const r: Res = await t.webSnapshot(cookie(req, `__Host-tpw_${teamId}`), now)
+          if (r.status !== 200) return json(r)
+          return new Response(renderWebView(r.body as Snapshot), { headers: { ...WEB_HEADERS, 'content-type': 'text/html; charset=utf-8', 'content-security-policy': WEB_CSP } })
+        }
         case 'POST signout': return json(await t.webSignout(cookie(req, `__Host-tpw_${teamId}`), now))
         default: return json({ status: 404, body: { error: 'Not found' } })
       }
