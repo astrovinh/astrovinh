@@ -1,6 +1,7 @@
 import { Team } from './team'
 import { randomId } from './util'
-import type { Res } from './util'
+import { cookie, WEB_CSP, WEB_HEADERS, webApp, webPage } from './web'
+import type { WebRes } from './web'
 
 export { Team }
 
@@ -21,14 +22,28 @@ const decode = (s: string): string | null => {
   }
 }
 
-const json = (r: Res) =>
-  new Response(JSON.stringify(r.body), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+const json = (r: WebRes) => {
+  const headers = new Headers({ 'content-type': 'application/json', ...WEB_HEADERS })
+  for (const value of r.cookies ?? []) headers.append('set-cookie', value)
+  return new Response(JSON.stringify(r.body), { status: r.status, headers })
+}
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url)
     const testNow = env.ALLOW_TEST_CLOCK === '1' ? Number(req.headers.get('x-now')) : Number.NaN
     const now = Number.isFinite(testNow) && testNow > 0 ? testNow : Date.now()
+    const parts = url.pathname.split('/').filter(Boolean)
+    if (parts[0] === 'web') {
+      // Check before body parsing or any storage work, including unknown browser POST routes.
+      if (req.method === 'POST' && req.headers.get('origin') !== url.origin) return json({ status: 403, body: { error: 'Browser requests must come from this origin' } })
+      if (req.method === 'GET' && url.pathname === '/web/assets/app.js') {
+        return new Response(webApp, { headers: { ...WEB_HEADERS, 'content-type': 'text/javascript; charset=utf-8' } })
+      }
+      if (req.method === 'GET' && parts.length === 2 && TEAM_ID.test(parts[1]!)) {
+        return new Response(webPage, { headers: { ...WEB_HEADERS, 'content-type': 'text/html; charset=utf-8', 'content-security-policy': WEB_CSP } })
+      }
+    }
 
     const raw = req.method === 'GET' || req.method === 'DELETE' ? '' : await req.text()
     if (raw.length > MAX_BODY) return json({ status: 413, body: { error: 'Request too large' } })
@@ -40,8 +55,19 @@ export default {
         return json({ status: 400, body: { error: 'Body is not JSON' } })
       }
     }
-    const key = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
-    const parts = url.pathname.split('/').filter(Boolean)
+    const key = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? ''
+    if (parts[0] === 'web') {
+      const teamId = parts[1] ?? ''
+      if (!TEAM_ID.test(teamId) || parts.length !== 3) return json({ status: 404, body: { error: 'Not found' } })
+      const t = team(env, teamId)
+      switch (`${req.method} ${parts[2]}`) {
+        case 'POST challenge': return json(await t.webChallenge(now))
+        case 'POST exchange': return json(await t.webExchange(cookie(req, `__Host-tpc_${teamId}`), now))
+        case 'GET snapshot': return json(await t.webSnapshot(cookie(req, `__Host-tpw_${teamId}`), now))
+        case 'POST signout': return json(await t.webSignout(cookie(req, `__Host-tpw_${teamId}`), now))
+        default: return json({ status: 404, body: { error: 'Not found' } })
+      }
+    }
     if (parts[0] !== 'teams') return json({ status: 404, body: { error: 'Not found' } })
 
     if (parts.length === 1 && req.method === 'POST') {
@@ -55,6 +81,10 @@ export default {
     const route = `${req.method} ${parts.slice(2).join('/').replace(/^(sessions|members|signals)\/[^/]+$/, '$1/:id')}`
 
     switch (route) {
+      case 'POST web/approve':
+        return json(await t.webApprove(key, body, now))
+      case 'POST web/revoke':
+        return json(await t.webRevoke(key))
       case 'POST join':
         return json(await t.join(body, now))
       case 'POST pair':

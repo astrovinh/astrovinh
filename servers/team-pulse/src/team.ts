@@ -1,6 +1,8 @@
 import { DurableObject } from 'cloudflare:workers'
 import { fail, nameKey, ok, randomHex, randomId, safeEqual, sha256, text } from './util'
 import type { Res } from './util'
+import { WEB_LIFE_SECONDS, webCookie } from './web'
+import type { WebRes } from './web'
 
 export const CAPS = { team: 60, name: 40, session: 32, project: 64, branch: 96, line: 120, status: 280, handoff: 280, win: 120 } as const
 
@@ -30,6 +32,10 @@ export class Team extends DurableObject {
       CREATE TABLE IF NOT EXISTS keys (key_hash TEXT PRIMARY KEY, member TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS keys_member ON keys (member);
       CREATE TABLE IF NOT EXISTS pairs (code_hash TEXT PRIMARY KEY, member TEXT NOT NULL, expires_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS web_challenges (secret_hash TEXT PRIMARY KEY, code_hash TEXT NOT NULL, member TEXT NOT NULL DEFAULT '', source_key TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, approved_at INTEGER NOT NULL DEFAULT 0, consumed_at INTEGER NOT NULL DEFAULT 0);
+      CREATE INDEX IF NOT EXISTS web_challenges_code ON web_challenges (code_hash);
+      CREATE TABLE IF NOT EXISTS web_sessions (token_hash TEXT PRIMARY KEY, member TEXT NOT NULL, source_key TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS web_sessions_member ON web_sessions (member);
       CREATE TABLE IF NOT EXISTS signals (id TEXT PRIMARY KEY, kind TEXT NOT NULL, from_member TEXT NOT NULL, to_member TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, done_at INTEGER NOT NULL DEFAULT 0);
       CREATE INDEX IF NOT EXISTS signals_created ON signals (created_at);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, member TEXT NOT NULL, project TEXT NOT NULL, branch TEXT NOT NULL, line TEXT NOT NULL, state TEXT NOT NULL, state_since INTEGER NOT NULL, five_hour REAL, week REAL, started_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
@@ -171,8 +177,95 @@ export class Team extends DurableObject {
 
   protected async me(key: string): Promise<{ id: string; name: string; isAdmin: boolean } | null> {
     if (!key) return null
-    const r = this.sql.exec('SELECT m.id, m.name, m.is_admin FROM keys k JOIN members m ON m.id = k.member WHERE k.key_hash = ?', await sha256(key)).toArray()[0]
+    return this.memberByKeyHash(await sha256(key))
+  }
+
+  protected memberByKeyHash(hash: string): { id: string; name: string; isAdmin: boolean } | null {
+    const r = this.sql.exec('SELECT m.id, m.name, m.is_admin FROM keys k JOIN members m ON m.id = k.member WHERE k.key_hash = ?', hash).toArray()[0]
     return r ? { id: String(r.id), name: String(r.name), isAdmin: Number(r.is_admin) === 1 } : null
+  }
+
+  async webChallenge(now: number): Promise<WebRes> {
+    if (!this.meta('team')) return fail(404, 'No such team')
+    if (this.limited('wch', 20, now)) return fail(429, 'Too many browser codes. Wait a minute and try again.')
+    const secret = randomHex(32)
+    const secretHash = await sha256(secret)
+    const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+    // Retry a display-code collision before storing; no await between the collision check and insert.
+    let code: string
+    let codeHash: string
+    do {
+      code = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => alphabet[b % alphabet.length]).join('')
+      codeHash = await sha256(code)
+    } while (this.sql.exec('SELECT 1 FROM web_challenges WHERE code_hash = ? AND expires_at > ? AND consumed_at = 0', codeHash, now).toArray().length)
+    const expiresAt = now + 600_000
+    this.sql.exec('INSERT INTO web_challenges (secret_hash, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)', secretHash, codeHash, now, expiresAt)
+    return { ...ok({ code, expiresAt }), cookies: [webCookie(`__Host-tpc_${this.meta('id')}`, secret, 600)] }
+  }
+
+  async webApprove(key: string, body: any, now: number): Promise<Res> {
+    const code = typeof body?.code === 'string' ? body.code.trim().toUpperCase() : ''
+    const [sourceKey, codeHash] = await Promise.all([sha256(key), sha256(code)])
+    const me = this.memberByKeyHash(sourceKey)
+    if (!me) return fail(401, 'Not a member of this team')
+    if (this.limited(`wap:${me.id}`, 6, now)) return fail(429, 'Too many browser approvals. Wait a minute and try again.')
+    // Authentication, lookup and approval are synchronous after hashing, so leave/revoke cannot race the write.
+    const r = this.sql.exec('SELECT secret_hash FROM web_challenges WHERE code_hash = ? AND expires_at > ? AND approved_at = 0 AND consumed_at = 0', codeHash, now).toArray()[0]
+    if (!r) return fail(403, 'That code is not valid or has expired. Refresh the page for a new one.')
+    this.sql.exec('UPDATE web_challenges SET member = ?, source_key = ?, approved_at = ? WHERE secret_hash = ?', me.id, sourceKey, now, String(r.secret_hash))
+    return ok({ ok: true })
+  }
+
+  async webExchange(secret: string, now: number): Promise<WebRes> {
+    if (!/^[0-9a-f]{64}$/.test(secret)) return fail(403, 'Browser code is not valid or has expired. Refresh the page for a new one.')
+    const token = randomHex(32)
+    const [secretHash, tokenHash] = await Promise.all([sha256(secret), sha256(token)])
+    // No await between read, consume and session creation: only the challenge's browser can exchange, once.
+    const r = this.sql.exec('SELECT * FROM web_challenges WHERE secret_hash = ? AND expires_at > ? AND consumed_at = 0', secretHash, now).toArray()[0]
+    if (!r) return fail(403, 'Browser code is not valid or has expired. Refresh the page for a new one.')
+    if (Number(r.approved_at) === 0) return { status: 202, body: { waiting: true } }
+    const me = this.memberByKeyHash(String(r.source_key))
+    if (!me || me.id !== String(r.member)) return fail(403, 'Browser approval has been revoked. Refresh the page for a new one.')
+    const expiresAt = now + WEB_LIFE_SECONDS * 1000
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec('UPDATE web_challenges SET consumed_at = ? WHERE secret_hash = ?', now, secretHash)
+      this.sql.exec('INSERT INTO web_sessions (token_hash, member, source_key, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', tokenHash, me.id, String(r.source_key), now, expiresAt)
+    })
+    return { ...ok({ ok: true }), cookies: [
+      webCookie(`__Host-tpw_${this.meta('id')}`, token, WEB_LIFE_SECONDS),
+      webCookie(`__Host-tpc_${this.meta('id')}`, '', 0)
+    ] }
+  }
+
+  protected async webSession(token: string, now: number) {
+    if (!/^[0-9a-f]{64}$/.test(token)) return null
+    const tokenHash = await sha256(token)
+    return this.sql.exec(
+      'SELECT w.token_hash, w.member, w.expires_at FROM web_sessions w JOIN keys k ON k.key_hash = w.source_key AND k.member = w.member JOIN members m ON m.id = w.member WHERE w.token_hash = ? AND w.expires_at > ?',
+      tokenHash, now
+    ).toArray()[0] ?? null
+  }
+
+  async webSnapshot(token: string, now: number): Promise<Res> {
+    const session = await this.webSession(token, now)
+    if (!session) return fail(403, 'Browser sign-in is not valid or has expired. Refresh the page to connect again.')
+    if (this.limited(`web:${session.member}`, 4, now)) return fail(429, 'Too many browser reads. Wait a minute and try again.')
+    return ok({ ...this.snapshotFor(String(session.member), now), sessionExpiresAt: Number(session.expires_at) })
+  }
+
+  async webSignout(token: string, now: number): Promise<WebRes> {
+    const session = await this.webSession(token, now)
+    if (!session) return fail(403, 'Browser sign-in is not valid or has expired. Refresh the page to connect again.')
+    this.sql.exec('DELETE FROM web_sessions WHERE token_hash = ?', String(session.token_hash))
+    return { ...ok({ ok: true }), cookies: [webCookie(`__Host-tpw_${this.meta('id')}`, '', 0)] }
+  }
+
+  async webRevoke(key: string): Promise<Res> {
+    const me = await this.me(key)
+    if (!me) return fail(401, 'Not a member of this team')
+    this.sql.exec('DELETE FROM web_sessions WHERE member = ?', me.id)
+    this.sql.exec('DELETE FROM web_challenges WHERE member = ?', me.id)
+    return ok({ ok: true })
   }
 
   /** Deletes rows older than KEEP_MS, at most once an hour. */
@@ -181,6 +274,8 @@ export class Team extends DurableObject {
     this.sql.exec('DELETE FROM segments WHERE end_at < ?', now - Team.KEEP_MS)
     this.sql.exec('DELETE FROM sessions WHERE seen_at < ?', now - Team.KEEP_MS)
     this.sql.exec('DELETE FROM pairs WHERE expires_at <= ?', now)
+    this.sql.exec('DELETE FROM web_challenges WHERE expires_at <= ?', now)
+    this.sql.exec('DELETE FROM web_sessions WHERE expires_at <= ?', now)
     const removedSignals = this.sql.exec("DELETE FROM signals WHERE created_at < ? OR (kind = 'handoff' AND done_at != 0)", now - Team.KEEP_MS)
     if (removedSignals.rowsWritten > 0) this.view = null
     this.setMeta('pruned_at', String(now))
@@ -230,14 +325,18 @@ export class Team extends DurableObject {
     const me = await this.me(key)
     if (!me) return fail(401, 'Not a member of this team')
     if (this.limited(`rd:${me.id}`, 10, now)) return fail(429, 'Too many reads')
+    return ok(this.snapshotFor(me.id, now))
+  }
+
+  protected snapshotFor(member: string, now: number) {
     // Every open session polls, so reading the tables per poll costs sessions x team size in rows a day; one read per VIEW_MS serves them all.
     const v = this.view
     const fresh = v !== null && now >= v.at && now - v.at < Team.VIEW_MS
     if (!fresh) this.view = { at: now, body: this.readView(now) }
     const live = this.view!.body.signals.filter(s => now - s.at < SIGNAL_LIFE[s.kind])
     // The cached view is shared by the whole team. Private handoffs must be filtered for EACH caller here.
-    const signals = live.filter(s => s.kind !== 'handoff' || s.from === me.id || s.to === me.id)
-    return ok({ ...this.view!.body, signals, you: me.id })
+    const signals = live.filter(s => s.kind !== 'handoff' || s.from === member || s.to === member)
+    return { ...this.view!.body, signals, you: member }
   }
 
   protected readView(now: number): Record<string, unknown> & { signals: Signal[] } {
@@ -380,6 +479,8 @@ export class Team extends DurableObject {
     this.sql.exec('DELETE FROM signals WHERE from_member = ? OR to_member = ?', id, id)
     this.sql.exec('DELETE FROM keys WHERE member = ?', id)
     this.sql.exec('DELETE FROM pairs WHERE member = ?', id)
+    this.sql.exec('DELETE FROM web_sessions WHERE member = ?', id)
+    this.sql.exec('DELETE FROM web_challenges WHERE member = ?', id)
     this.sql.exec('DELETE FROM segments WHERE member = ?', id)
     this.sql.exec('DELETE FROM sessions WHERE member = ?', id)
     this.sql.exec('DELETE FROM members WHERE id = ?', id)
@@ -397,6 +498,8 @@ export class Team extends DurableObject {
     const me = await this.me(key)
     if (!me) return fail(401, 'Not a member of this team')
     this.sql.exec('DELETE FROM keys WHERE key_hash = ?', keyHash)
+    this.sql.exec('DELETE FROM web_sessions WHERE source_key = ?', keyHash)
+    this.sql.exec('DELETE FROM web_challenges WHERE source_key = ?', keyHash)
     if (this.sql.exec('SELECT 1 FROM keys WHERE member = ? LIMIT 1', me.id).toArray().length) return ok({ ok: true, removed: 'device' })
     this.deleteMember(me.id)
     return ok({ ok: true, removed: 'member' })

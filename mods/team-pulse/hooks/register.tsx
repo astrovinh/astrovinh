@@ -248,6 +248,15 @@ async function runCommand($: any, args: string): Promise<string> {
       await openPanel($)
       return `This Mac is now part of ${r.data.name} on ${r.data.team}.`
     }
+    case 'web': {
+      if (!m) return NOT_IN_TEAM
+      if (!rest.length) return `Open ${m.server.replace(/\/+$/, '')}/web/${m.teamId} in your browser. It will show a code; type /team web <code> here to connect it for 30 days.`
+      const code = rest.join(' ').trim().toUpperCase()
+      const revoke = code === 'REVOKE'
+      const r = await call($, m.server, { method: 'POST', path: `/teams/${m.teamId}/web/${revoke ? 'revoke' : 'approve'}`, key: m.key, body: revoke ? undefined : { code } })
+      if (!r.ok) return r.message
+      return revoke ? 'Signed out every browser you connected.' : `Connected. That browser can see ${m.team} for 30 days. /team web revoke signs out every browser you connected.`
+    }
     case 'leave': {
       if (!m) return 'You are not in a team.'
       const r = await call<{ ok: boolean; removed: 'device' | 'member' }>($, m.server, { method: 'POST', path: `/teams/${m.teamId}/leave`, key: m.key })
@@ -374,7 +383,7 @@ async function runCommand($: any, args: string): Promise<string> {
       await $.store.set('server', rest[0])
       return `Team server set to ${rest[0]} for new teams. Run /team join or /team create to use it.`
     default:
-      return 'Commands: /team, create, join, device, leave, pause, resume, say, status, clock, handoff, wave, win, signals, name, code, remove, server.'
+      return 'Commands: /team, create, join, device, web, leave, pause, resume, say, status, clock, handoff, wave, win, signals, name, code, remove, server.'
   }
 }
 

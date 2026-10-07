@@ -543,3 +543,52 @@ test('team commands help includes handoff, wave, win and signals', async ($, on)
   const reply = (await $.command.run({ ...command, args: 'help' })).text
   for (const word of ['handoff', 'wave', 'win', 'signals']) expect(reply).toContain(word)
 })
+
+test('team web replies with only the page URL and connection instructions', async ($, on) => {
+  const current = { ...onTeam(), server: 'https://pulse.test///' }
+  const p = deviceSetup(on, current)
+  expect((await $.command.run({ ...command, args: 'web' })).text).toBe('Open https://pulse.test/web/abcdefghij in your browser. It will show a code; type /team web <code> here to connect it for 30 days.')
+  expect(p.requests).toHaveLength(0)
+  expect(p.store.membership).toEqual(current)
+})
+
+test('team web code approves with the member key without storing the code or changing activity', async ($, on) => {
+  const p = deviceSetup(on, onTeam())
+  const current = { ...onTeam(), key: p.joined.key }
+  p.store.membership = current
+  const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => alphabet[b % alphabet.length]).join('')
+  expect((await $.command.run({ ...command, args: `web  ${code.toLowerCase()}  ` })).text).toBe('Connected. That browser can see Murror for 30 days. /team web revoke signs out every browser you connected.')
+  expect(p.requests).toEqual([{ method: 'POST', url: 'https://pulse.test/teams/abcdefghij/web/approve', body: { code }, authorization: `Bearer ${current.key}` }])
+  expect(p.actions).toEqual(['fetch'])
+  expect(p.store.membership).toEqual(current)
+  expect(JSON.stringify(p.store).includes(code)).toBe(false)
+  expect(JSON.stringify(p.state).includes(code)).toBe(false)
+})
+
+test('team web revoke calls the authenticated revoke endpoint', async ($, on) => {
+  const p = deviceSetup(on, onTeam())
+  p.store.membership = { ...onTeam(), key: p.joined.key }
+  expect((await $.command.run({ ...command, args: 'web revoke' })).text).toBe('Signed out every browser you connected.')
+  expect(p.requests).toEqual([{ method: 'POST', url: 'https://pulse.test/teams/abcdefghij/web/revoke', body: null, authorization: `Bearer ${p.joined.key}` }])
+  expect(p.actions).toEqual(['fetch'])
+})
+
+test('every team web command needs membership', async ($, on) => {
+  const p = deviceSetup(on)
+  for (const args of ['web', 'web ABC234', 'web revoke']) expect((await $.command.run({ ...command, args })).text).toContain('You are not in a team.')
+  expect(p.requests).toHaveLength(0)
+})
+
+test('team web commands return server failures without storing anything or opening the panel', async ($, on) => {
+  const p = deviceSetup(on, onTeam(), { error: 'That code is not valid or has expired. Refresh the page for a new one.' })
+  for (const args of ['web ABC234', 'web revoke']) expect((await $.command.run({ ...command, args })).text).toBe('That code is not valid or has expired. Refresh the page for a new one.')
+  expect(p.requests.map(r => r.method)).toEqual(['POST', 'POST'])
+  expect(p.store.membership).toEqual(onTeam())
+  expect(p.actions.includes('open')).toBe(false)
+})
+
+test('team commands help includes web', async ($, on) => {
+  mock.store(on)
+  expect((await $.command.run({ ...command, args: 'help' })).text).toContain('web')
+})
