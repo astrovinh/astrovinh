@@ -6,7 +6,7 @@ Party shows Claude Code's agents as small pixel animals in a side panel. The ani
 
 Type `/party` to open or close it. Opening it also pins the panel open for every session you have open on this Mac. Closing it unpins it for those sessions.
 
-A session only shows up if the Party mod is loaded in it. In a session that was already open when you installed Party, type `/reload-plugins` once, or restart that session. Sessions are labeled by repo or folder name.
+A session only shows up if the Party mod is loaded in it. A session that was already open when you installed Party does not have it: open a new session. (After the first install, later updates only need `/reload-plugins` in an open session.) Sessions are labeled by repo or folder name.
 
 Your current session's agents are shown first. Other sessions start folded into a row of tiny animals. Press a session's name to show or hide its agents. In the terminal, Party uses plain text instead of pictures.
 
@@ -84,7 +84,7 @@ Unknown commands show the same help. Motion and size apply immediately in the cu
 ## If something looks wrong
 
 - **Agent missing:** workflow agents and teammates running in other panes are not visible in this activity feed. If Claude Code lists a teammate without activity, Party says "Reported running, activity unavailable".
-- **Session missing:** load Party in that session. Type `/reload-plugins` once or restart it. Closed sessions stop appearing after their last update becomes stale.
+- **Session missing:** that session started before Party was installed. Open a new session (or restart it). Closed sessions stop appearing after their last update becomes stale.
 - **Panel empty:** no agents yet. They show up here when Claude Code starts one.
 - **Stuck at Working:** the status is the engine's. Party does not guess that an agent is stuck from how long it has been quiet.
 - **No progress count:** the agent has not written a to-do list. Tools and time still show activity.
@@ -96,4 +96,4 @@ From a copy of this repo, run `bash mods/party/install.sh`. It clones or updates
 
 To choose another install folder, set `MURROR_PARTY_DEST` to that folder when running the installer.
 
-Done. Type /reload-plugins in each Claude Code session you have open (or open a new one), then /party.
+Done. Open a NEW Claude Code session (an already open one will not see Party yet), then type /party.

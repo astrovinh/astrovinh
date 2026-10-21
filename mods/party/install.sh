@@ -60,7 +60,7 @@ with open(path, "w") as f:
     f.write("\n")
 PY
 
-  echo "Done. Type /reload-plugins in each Claude Code session you have open (or open a new one), then /party."
+  echo "Done. Open a NEW Claude Code session (an already open one will not see Party yet), then type /party."
 }
 
 main "$@"

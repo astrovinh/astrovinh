@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 INSTALLER = Path(__file__).with_name('install.sh').resolve()
-DONE = 'Done. Type /reload-plugins in each Claude Code session you have open (or open a new one), then /party.'
+DONE = 'Done. Open a NEW Claude Code session (an already open one will not see Party yet), then type /party.'
 
 
 class InstallerTests(unittest.TestCase):
