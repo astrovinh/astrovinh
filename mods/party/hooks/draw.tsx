@@ -98,10 +98,18 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
       {sessions.map((s, index) => {
         const counts = sessionSummary([s])
         const open = index === 0 || view.expanded?.includes(s.id)
-        const label = `${s.label || 'This session'} \u00b7 ${counts.total} ${counts.total === 1 ? 'agent' : 'agents'}`
+        const agentCount = `${counts.total} ${counts.total === 1 ? 'agent' : 'agents'}`
+        const label = `${s.label || 'This session'} \u00b7 ${agentCount}`
         return (
           <Box key={`group:${s.id}`} flexDirection="column">
-            {surface !== 'desktop' ? <Box paddingX={2}><Text color={COLOR.second}>{label}</Text></Box> : index > 0 ? (
+            {index === 0 ? sessions.length > 1 ? (
+              surface !== 'desktop' ? <Box paddingX={2}><Text color={COLOR.quiet}>{`This session  ${agentCount}`}</Text></Box> : (
+                <Box paddingX={2} paddingY={1} gap={1} alignItems="center" justifyContent="space-between">
+                  <Text color={COLOR.quiet}>This session</Text>
+                  <Text color={COLOR.quiet}>{agentCount}</Text>
+                </Box>
+              )
+            ) : null : surface !== 'desktop' ? <Box paddingX={2}><Text color={COLOR.second}>{label}</Text></Box> : (
               <Box key={`header:${s.id}`} paddingX={2} paddingY={1} gap={1} alignItems="center" justifyContent="space-between">
                 <Box gap={1} minWidth={0} flexGrow={1}>
                   <Button key={`expand:${s.id}`} plain label={label} onPress={() => {}} />
@@ -111,7 +119,7 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
                   {open ? <Text color={COLOR.quiet}>hide</Text> : s.agents.map(row => <Svg key={row.id} {...animation} {...picture(row, s.id, still, miniSize)} width={miniSize} height={miniSize} />)}
                 </Box>
               </Box>
-            ) : null}
+            )}
             {surface !== 'desktop' || open ? drawRows(s.agents, s.counts?.overflow ?? 0, s.id) : null}
           </Box>
         )

@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import { bar, drawPanel, meterWidth, pictureCount } from './draw'
 import { buildRows } from './roster'
-import type { AgentRow } from '../types'
+import type { AgentRow, SessionView } from '../types'
 
 const NOW = 1_800_000_000_000
 const view = { ...buildRows({ agents: [{ id: 'a', type: 'Explore', status: 'waiting', description: 'A long task', firstSeen: NOW - 48000, endedAt: null }], stats: { a: { tools: 4, tool: 'read', todos: [{ status: 'completed' }, { status: 'in_progress', activeForm: 'Reading code' }] } }, main: null, now: NOW }), now: NOW, session: 'astrovinh' }
@@ -115,21 +115,20 @@ const renderDesktop = (rows = view.rows, columns?: number) => {
   return nodes
 }
 
-const multiPanel = (open = false, surface = 'desktop') => {
+const multiPanel = (open = false, surface = 'desktop', own: SessionView = { id: 'own', label: 'astrovinh', at: NOW, agents: view.rows }, includeOther = true) => {
   const nodes: Node[] = []
   const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
-  const own = { id: 'own', label: 'astrovinh', at: NOW, agents: view.rows }
   const other = { id: 'other', label: 'Debug26', at: NOW, agents: [{ ...view.rows[0]!, id: 'main', name: 'Foreign Hop', line: 'Foreign work' }, { ...view.rows[0]!, id: 'b', state: 'running' as const }] }
-  drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg'), Button: component('Button') }, surface, { ...view, sessions: [own, other], expanded: open ? ['other'] : [] } as any, 44)
+  drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg'), Button: component('Button') }, surface, { ...view, sessions: includeOther ? [own, other] : [own], expanded: open ? ['other'] : [] } as any, 44)
   return nodes
 }
 
-test('multi-session header counts folded rows and has no own session band or duplicate title', () => {
+test('multi-session summary counts folded rows without an uppercase band or duplicate title', () => {
   const nodes = multiPanel()
   const text = nodes.filter(n => n.type === 'Text').map(nodeText)
   expect(text).toContain('3 agents, 1 working \u00b7 2 need you')
   expect(text).toContain('2 sessions')
-  expect(text.some(t => ['Party', 'This session', 'THIS SESSION', 'astrovinh'].includes(t))).toBe(false)
+  expect(text.some(t => ['Party', 'THIS SESSION', 'astrovinh'].includes(t))).toBe(false)
   const button = nodes.find(n => n.type === 'Button')!
   expect(button.props.key).toBe('expand:other')
   expect(button.props.label).toBe('Debug26 \u00b7 2 agents')
@@ -137,6 +136,58 @@ test('multi-session header counts folded rows and has no own session band or dup
   expect(nodes.filter(n => n.type === 'Svg' && n.props.width === 24)).toHaveLength(2)
   expect(nodes.some(n => n.type === 'Text' && nodeText(n) === 'needs you' && n.props.color === '#d6ba7b')).toBe(true)
   expect(text.includes('Foreign work')).toBe(false)
+})
+
+test('desktop labels this session before its rows with a quiet left label and right agent count', () => {
+  for (const total of [0, 1, 2, 15]) {
+    const rows = Array.from({ length: Math.min(total, 2) }, (_, i) => ({ ...view.rows[0]!, id: `own-${i}` }))
+    const nodes = multiPanel(false, 'desktop', { id: 'own', label: 'astrovinh', at: NOW, agents: rows, counts: { total, working: 0, blocked: 0, overflow: Math.max(0, total - rows.length) } })
+    const group = nodes.find(n => n.props.key === 'group:own')!
+    const [header, rowGroup] = children(group)
+    expect(header!.type).toBe('Box')
+    expect(children(header!).map(nodeText)).toEqual(['This session', `${total} ${total === 1 ? 'agent' : 'agents'}`])
+    expect(header!.props.justifyContent).toBe('space-between')
+    expect(header!.props.paddingX).toBe(2)
+    expect(rowGroup!.props.key).toBe('session:own')
+    const descendants = (node: Node): Node[] => [node, ...children(node).flatMap(descendants)]
+    for (const node of descendants(header!)) {
+      expect(['Button', 'Svg'].includes(node.type)).toBe(false)
+      expect(Object.keys(node.props).some(key => key === 'backgroundColor' || key.startsWith('on'))).toBe(false)
+      if (node.type === 'Text') {
+        expect(node.props.color).toBe('#aaa69a')
+        expect(node.props.bold).toBeUndefined()
+        expect(node.props.fontFamily).toBeUndefined()
+      }
+    }
+  }
+})
+
+test('one session has no local header on desktop or terminal with explicit or fallback sessions', () => {
+  for (const surface of ['desktop', 'terminal']) {
+    const own = { id: 'own', label: 'astrovinh', at: NOW, agents: view.rows }
+    const explicit = multiPanel(false, surface, own, false)
+    const group = explicit.find(n => n.props.key === 'group:own')!
+    expect(children(group).map(n => n.props.key)).toEqual(['session:own'])
+    const fallback: Node[] = []
+    const component = (type: string) => (props: any) => { const node = { type, props }; fallback.push(node); return node }
+    drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg') }, surface, view)
+    for (const nodes of [explicit, fallback]) {
+      expect(nodes.filter(n => n.type === 'Text').some(n => /This session|astrovinh/.test(nodeText(n)))).toBe(false)
+    }
+  }
+})
+
+test('terminal labels this session with its agent count in one plain line before its rows', () => {
+  for (const total of [0, 1, 2]) {
+    const rows = Array.from({ length: total }, (_, i) => ({ ...view.rows[0]!, id: `own-${i}` }))
+    const nodes = multiPanel(false, 'terminal', { id: 'own', label: 'astrovinh', at: NOW, agents: rows })
+    const group = nodes.find(n => n.props.key === 'group:own')!
+    const [header, rowGroup] = children(group)
+    expect(children(header!).map(n => n.type)).toEqual(['Text'])
+    expect(nodeText(header)).toBe(`This session  ${total} ${total === 1 ? 'agent' : 'agents'}`)
+    expect(rowGroup!.props.key).toBe('session:own')
+    expect(nodes.some(n => n.type === 'Svg' || n.type === 'Button')).toBe(false)
+  }
 })
 
 test('expanded foreign sessions reuse streamlined rows and replace miniature animals with hide', () => {
@@ -157,10 +208,10 @@ test('terminal groups every session even when desktop folding is closed and draw
   const nodes = multiPanel(false, 'terminal')
   expect(nodes.some(n => n.type === 'Svg')).toBe(false)
   const text = nodes.filter(n => n.type === 'Text').map(nodeText).join(' ')
-  expect(text).toContain('astrovinh')
+  expect(text).toContain('This session  1 agent')
   expect(text).toContain('Debug26')
   expect(text).toContain('Foreign work')
-  expect(text.indexOf('astrovinh') < text.indexOf('Debug26')).toBe(true)
+  expect(text.indexOf('This session') < text.indexOf('Debug26')).toBe(true)
 })
 
 test('picture cache keeps separate entries for matching agent ids in different sessions', () => {
