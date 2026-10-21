@@ -1,0 +1,6 @@
+{
+  "name": "party",
+  "version": "0.1.0",
+  "description": "See Claude Code's agents as small pixel animals in a side panel opened with /party.",
+  "types": "./types/index.d.ts"
+}
