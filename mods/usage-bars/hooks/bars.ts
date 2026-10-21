@@ -2,6 +2,51 @@
 
 export type Cell = { width: number; color?: string; dim?: boolean; glyph: string }
 
+const BAR = 10 // full terminal bar cells
+const LABELS = { day: 'Day', week: 'Week', ctx: 'Ctx' }
+
+export type TerminalLayout = {
+  bar: number
+  labels: 'long' | 'short'
+  gap: number
+  spend: boolean
+  system: boolean
+  panels: ('day' | 'week' | 'ctx')[]
+  bars: boolean
+}
+
+/** Worst-case cells: percentages reserve " 100%", regardless of the current reading. */
+export function layoutWidth(layout: TerminalLayout, spendChars: number): number {
+  const panels = layout.panels.reduce((width, panel) => {
+    const label = layout.labels === 'long' ? LABELS[panel].length : 1
+    // Without bars, the label's trailing space is also the percent's separator.
+    return width + label + (layout.bars ? 1 + layout.bar : 0) + 5
+  }, 0)
+  const gaps = Math.max(0, layout.panels.length - 1) * layout.gap
+  const spend = layout.spend && spendChars > 0 ? layout.gap + spendChars : 0
+  const system = layout.system ? 3 + 8 + 3 + 8 + 3 + 9 : 0
+  return panels + gaps + spend + system
+}
+
+/** Prefer the richest band that fits, keeping one terminal cell spare. */
+export function terminalLayout(columns: number | undefined, spendChars: number): TerminalLayout {
+  const full: TerminalLayout = { bar: BAR, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
+  if (columns === undefined) return full
+  const compact: TerminalLayout = { ...full, bar: 6, gap: 2, system: false }
+  const short: TerminalLayout = { ...compact, bar: 4, labels: 'short', spend: false }
+  const percentages: TerminalLayout = { ...short, bar: 0, bars: false }
+  const candidates: TerminalLayout[] = [
+    full,
+    { ...full, system: false },
+    compact,
+    { ...compact, spend: false },
+    short,
+    percentages,
+    { ...percentages, panels: ['day'] }
+  ]
+  return candidates.find(layout => layoutWidth(layout, spendChars) <= columns - 1) ?? { ...percentages, panels: [] }
+}
+
 /** Split `width` cells across `weights` (largest remainder), so the cells always sum to `width`. */
 export function allocate(weights: number[], width: number): number[] {
   const total = weights.reduce((a, b) => a + b, 0)
@@ -17,7 +62,7 @@ export function allocate(weights: number[], width: number): number[] {
 
   for (const { i } of order) {
     if (left <= 0) break
-    cells[i] += 1
+    cells[i] = cells[i]! + 1
     left -= 1
   }
 
@@ -32,7 +77,7 @@ export function severityColor(percentUsed: number): string {
 /** Used share of a limit as a bar: a severity-colored used part, dim remainder. */
 export function limitCells(percentUsed: number, width: number): Cell[] {
   const used = Math.max(0, Math.min(100, percentUsed))
-  let [u, f] = allocate([used, 100 - used], width)
+  let [u, f] = allocate([used, 100 - used], width) as [number, number]
   // a non-zero reading always shows at least one cell
   if (used > 0 && u === 0 && width > 0) {
     u = 1
@@ -40,8 +85,8 @@ export function limitCells(percentUsed: number, width: number): Cell[] {
   }
 
   return [
-    { width: u, color: severityColor(used), glyph: '━' },
-    { width: f, dim: true, glyph: '━' }
+    { width: u, color: severityColor(used), glyph: '\u2501' },
+    { width: f, dim: true, glyph: '\u2501' }
   ]
 }
 
@@ -59,14 +104,14 @@ export function contextCells(segments: Seg[], width: number): { cells: Cell[]; l
 
   shown.forEach((s, i) => {
     if (s.kind === 'used') {
-      const color = PALETTE[used % PALETTE.length]
+      const color = PALETTE[used % PALETTE.length]!
       used += 1
       legend.push({ name: s.name, color })
-      cells.push({ width: counts[i], color, glyph: '━' })
+      cells.push({ width: counts[i]!, color, glyph: '\u2501' })
     } else if (s.kind === 'buffer') {
-      cells.push({ width: counts[i], dim: true, glyph: '─' })
+      cells.push({ width: counts[i]!, dim: true, glyph: '\u2500' })
     } else {
-      cells.push({ width: counts[i], dim: true, glyph: '━' })
+      cells.push({ width: counts[i]!, dim: true, glyph: '\u2501' })
     }
   })
 
@@ -137,7 +182,7 @@ function group(i: number, label: string, fills: { width: number; color: string }
     `<clipPath id="c${i}"><rect width="${BAR_W}" height="${BAR_H}" rx="${BAR_H / 2}"/></clipPath>` +
     `<rect width="${BAR_W}" height="${BAR_H}" rx="${BAR_H / 2}" fill="${TRACK}"/>` +
     `<g clip-path="url(#c${i})">${runs}</g></g>` +
-    `<text x="${LABEL_W + BAR_W + PCT_GAP}" y="10.5" fill="${pct === null ? FAINT : INK}">${pct === null ? '–' : `${Math.round(pct)}%`}</text>` +
+    `<text x="${LABEL_W + BAR_W + PCT_GAP}" y="10.5" fill="${pct === null ? FAINT : INK}">${pct === null ? '\u2013' : `${Math.round(pct)}%`}</text>` +
     `</g>`
   )
 }
@@ -166,7 +211,7 @@ export function usd(n: number): string {
 /** Day, Week and Ctx as one row: tiny labels, thin rounded bars. */
 export function bandSvg(a: BandInput): { source: string; alt: string; width: number } {
   const { cells } = contextCells(a.segments, BAR_W)
-  const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '─' ? BUFFER : 'transparent') }))
+  const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '\u2500' ? BUFFER : 'transparent') }))
 
   const pct = (r?: Reading) => (r ? `${Math.round(r.percentUsed)}%` : 'no reading')
   const alt =
@@ -252,7 +297,7 @@ export function detailSvg(a: BandInput): { source: string; alt: string; width: n
   if (!a.day && !a.week) say('No limit reading yet')
   if (a.spend !== null) {
     const n = a.spend.sessionsToday
-    say(`Week $${a.spend.week.toFixed(2)} · today $${a.spend.today.toFixed(2)} in ${n} session${n === 1 ? '' : 's'} · this session $${a.spend.session.toFixed(2)} · API prices`)
+    say(`Week $${a.spend.week.toFixed(2)} \u00b7 today $${a.spend.today.toFixed(2)} in ${n} session${n === 1 ? '' : 's'} \u00b7 this session $${a.spend.session.toFixed(2)} \u00b7 API prices`)
   }
 
   const s = a.system

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, BAND_H, contextCells, detailSvg, limitCells, usd } from './bars'
+import { bandSvg, BAND_H, contextCells, detailSvg, limitCells, terminalLayout, usd } from './bars'
 import type { Cell } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -15,7 +15,6 @@ const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limi
 const spend = atom({ plugin: 'usage-bars', key: 'spend' } as const, null as Spend | null)
 const system = atom({ plugin: 'usage-bars', key: 'system' } as const, null as System | null)
 
-const BAR = 10 // terminal bar cells
 const SYSTEM_MS = 10_000
 
 /** A command's output, or '' when it fails: a missing reading leaves its ring out. */
@@ -122,42 +121,71 @@ export const register: Register = on => {
       )
     }
 
+    const dollars = spent === null ? '' : usd(spent.week)
+    const layout = terminalLayout(e.viewport?.columns, dollars.length)
+    if (!layout.panels.length) return next(e)
+
     const { Box, Text } = $.ui.resolve(e)
 
     const drawCells = (cells: Cell[]) =>
       cells
         .filter(c => c.width > 0)
         .map((c, i) => (
-          <Text key={String(i)} color={c.color} dimColor={c.dim}>
-            {c.glyph.repeat(c.width)}
-          </Text>
+          <Box key={String(i)} flexShrink={0}>
+            <Text wrap="truncate" color={c.color} dimColor={c.dim}>
+              {c.glyph.repeat(c.width)}
+            </Text>
+          </Box>
         ))
 
     const panel = (label: string, cells: Cell[] | null, value: number | null, last = false) => (
-      <Box marginRight={last ? 0 : 3}>
-        <Text dimColor>{label} </Text>
-        {cells ? drawCells(cells) : <Text dimColor>{'━'.repeat(BAR)}</Text>}
-        <Text dimColor>{value === null ? ' –' : ` ${Math.round(value)}%`}</Text>
+      <Box key={label} flexShrink={0} marginRight={last ? 0 : layout.gap}>
+        <Box flexShrink={0}>
+          <Text wrap="truncate" dimColor>{label} </Text>
+        </Box>
+        {layout.bars ? (
+          cells ? drawCells(cells) : (
+            <Box flexShrink={0}>
+              <Text wrap="truncate" dimColor>{'\u2501'.repeat(layout.bar)}</Text>
+            </Box>
+          )
+        ) : null}
+        <Box flexShrink={0}>
+          <Text wrap="truncate" dimColor>{`${layout.bars ? ' ' : ''}${value === null ? '\u2013' : `${Math.round(value)}%`}`}</Text>
+        </Box>
       </Box>
     )
 
     return (
-      <Box>
-        {panel('Day', day ? limitCells(day.percentUsed, BAR) : null, day?.percentUsed ?? null)}
-        {panel('Week', week ? limitCells(week.percentUsed, BAR) : null, week?.percentUsed ?? null)}
-        {panel('Ctx', segs.length ? contextCells(segs, BAR).cells : null, segs.length ? pct : null, true)}
-        {spent === null ? null : <Text dimColor>{`   ${usd(spent.week)}`}</Text>}
-        {sys === null ? null : (
-          <Text dimColor>
-            {[
-              sys.cpu === null ? '' : `CPU ${Math.round(sys.cpu)}%`,
-              sys.memory === null ? '' : `Mem ${Math.round(sys.memory)}%`,
-              sys.disk === null ? '' : `Disk ${Math.round(sys.disk.percent)}%`
-            ]
-              .filter(Boolean)
-              .map(t => `   ${t}`)
-              .join('')}
-          </Text>
+      <Box flexShrink={0}>
+        {layout.panels.map((kind, i) => {
+          const long = { day: 'Day', week: 'Week', ctx: 'Ctx' }[kind]
+          const label = layout.labels === 'long' ? long : long[0]!
+          const reading = kind === 'day' ? day : week
+          const value = kind === 'ctx' ? (segs.length ? pct : null) : reading?.percentUsed ?? null
+          const cells = !layout.bars ? null : kind === 'ctx'
+            ? (segs.length ? contextCells(segs, layout.bar).cells : null)
+            : (reading ? limitCells(reading.percentUsed, layout.bar) : null)
+          return panel(label, cells, value, i === layout.panels.length - 1)
+        })}
+        {!layout.spend || !dollars ? null : (
+          <Box flexShrink={0}>
+            <Text wrap="truncate" dimColor>{`${' '.repeat(layout.gap)}${dollars}`}</Text>
+          </Box>
+        )}
+        {!layout.system || sys === null ? null : (
+          <Box flexShrink={0}>
+            <Text wrap="truncate" dimColor>
+              {[
+                sys.cpu === null ? '' : `CPU ${Math.round(sys.cpu)}%`,
+                sys.memory === null ? '' : `Mem ${Math.round(sys.memory)}%`,
+                sys.disk === null ? '' : `Disk ${Math.round(sys.disk.percent)}%`
+              ]
+                .filter(Boolean)
+                .map(t => `   ${t}`)
+                .join('')}
+            </Text>
+          </Box>
         )}
       </Box>
     )
