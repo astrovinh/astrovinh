@@ -3,7 +3,7 @@ export type Slot = 'lead' | 'scout' | 'planner' | 'builder' | 'reviewer' | 'help
 export type AnimalKey = 'ember' | 'ember2' | 'hop' | 'sage' | 'bruno' | 'pan' | 'pip' | 'mochi' | 'biscuit' | 'waddle' | 'mochi2' | 'biscuit2' | 'waddle2'
 export type ToolKind = 'read' | 'edit' | 'run' | 'think'
 export type PartySize = 'tiny' | 'small' | 'medium'
-export type PartySettings = { motion: boolean; size: PartySize }
+export type PartySettings = { motion: boolean; size: PartySize; codex?: boolean }
 export type Todo = { status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 export type Progress = { done: number; total: number }
 export type AgentStats = { tools: number; tool: ToolKind; todos: Todo[] }
@@ -29,11 +29,14 @@ export type AgentRow = {
   endedAt: number | null
   todo: Progress | null
   note?: string
+  codex?: boolean
+  depth?: number
+  meta?: string
 }
 export type Roster = { rows: AgentRow[]; working: number; blocked: number; total: number; overflow: number }
 export type SessionSnapshot = { id: string; label: string; at: number; startedAt?: number; agents: AgentRow[] }
 export type SessionView = SessionSnapshot & { counts?: Omit<Roster, 'rows'> }
-export type RosterView = Roster & { session: string; now: number; sessions?: SessionView[]; expanded?: string[]; settings?: PartySettings }
+export type RosterView = Roster & { session: string; now: number; sessions?: SessionView[]; expanded?: string[]; settings?: PartySettings; codex?: AgentRow[]; ready?: number }
 export type RosterInput = { agents: AgentRecord[]; stats: Record<string, AgentStats>; main: MainFacts | null; now: number }
 
 declare module 'claude-code' {
@@ -41,3 +44,10 @@ declare module 'claude-code' {
     'party': { roster: RosterView; expanded: string[]; settings: PartySettings }
   }
 }
+
+export type CodexRun = {
+  id: string; parentId: string | null; kind: 'run' | 'helper'
+  role: string | null; nickname: string | null; label: string | null
+  startedAt: number; lastAt: number; cmds: number; spawned: number; done: boolean; tokens: number | null
+}
+export type CodexAck = { through: number; ready: Record<string, number> }

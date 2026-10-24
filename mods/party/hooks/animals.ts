@@ -74,7 +74,7 @@ function badge(g: keyof typeof GLY, pulse: boolean) {
 const zee = (x: number, y: number, s: number, begin: number) => `<g transform="translate(${x} ${y})"><g>${tr('translate', '0 0;.5 -.9', 2.4, `begin="${begin}s"`)}${an('opacity', '0;1;1;0', 2.4, `begin="${begin}s" keyTimes="0;.2;.7;1"`)}<path d="M0 0 H1.2 L0 1.5 H1.2" fill="none" stroke="#9db4ff" stroke-width=".38" stroke-linecap="round" stroke-linejoin="round" transform="scale(${s})"/></g></g>`;
 const spark = (x: number, y: number, begin: number) => `<g transform="translate(${x} ${y})"><g>${tr('scale', '0;1;0', 1.4, `begin="${begin}s"`)}<path d="M0 -1 L.28 -.28 L1 0 L.28 .28 L0 1 L-.28 .28 L-1 0 L-.28 -.28 Z" fill="#ffe58a"/></g></g>`;
 
-export function animalSvg(key: AnimalKey, state: AgentState, tool: ToolKind, px = 3, opts: { still?: boolean } = {}): { source: string; alt: string } {
+export function animalSvg(key: AnimalKey, state: AgentState, tool: ToolKind, px = 3, opts: { still?: boolean; codex?: boolean } = {}): { source: string; alt: string } {
   const a = ANIMALS[key], sp = SPECIES[a.kind]!, u = 'a' + (++UID) + '_';
   const [fur, light, dark] = (sp.coats[a.coat] ?? sp.coats[0])!;
   const col: Record<string, string | undefined> = { F: fur, L: light, D: dark, W: '#ffffff', N: '#e07a8a', P: '#f2a7b5', B: '#e8a33a' };
@@ -100,8 +100,9 @@ export function animalSvg(key: AnimalKey, state: AgentState, tool: ToolKind, px 
     failed: badge('bang', false).replace('#d64545', '#d64545'), killed: badge('stop', false), idle: '' }[state] || '';
   const gray = state === 'killed';
   const inner = `<g clip-path="url(#${u}c)"><rect width="12" height="12" fill="${a.bg}"/><g${tilt}><g>${bob}${cells.join('')}${eyeG}</g></g></g>${fx}`;
+  const codex = opts.codex ? '<g data-codex="true"><rect x="0" y="0" width="5" height="3.4" rx=".7" fill="#3a3a8a" stroke="#6a6ad0" stroke-width=".25"/><path d="M.8 .9l.9 .8-.9 .8M2.5 2.6h1.5" fill="none" stroke="#f0efe9" stroke-width=".4"/></g>' : '';
   const defs = `<defs><clipPath id="${u}c"><rect width="12" height="12" rx="2.6"/></clipPath><filter id="${u}g"><feColorMatrix type="saturate" values=".05"/></filter></defs>`;
-  let source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" width="${12 * px}" height="${12 * px}" shape-rendering="crispEdges">${defs}${gray ? `<g filter="url(#${u}g)" opacity=".6">${inner}</g>` : inner}</svg>`;
+  let source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" width="${12 * px}" height="${12 * px}" shape-rendering="crispEdges">${defs}${gray ? `<g filter="url(#${u}g)" opacity=".6">${inner}</g>` : inner}${codex}</svg>`;
   if (opts.still) source = source.replace(/<animate[^>]*\/>/g, '');
   return { source, alt: `${a.name} the ${a.kind}, ${STATE_LABEL[state].toLowerCase()}` };
 }

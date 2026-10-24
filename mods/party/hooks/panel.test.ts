@@ -720,3 +720,71 @@ test('tiny terminal metadata stays dim and session padding fits even below four 
     for (const box of nodes.filter(n => n.type === 'Box' && n.props.paddingX)) expect(2 * box.props.paddingX <= columns - 1).toBe(true)
   }
 })
+
+const cxRows = (): AgentRow[] => [
+  { ...view.rows[0]!, id: 'cx-parent', name: 'task-38', state: 'running', codex: true, depth: 0, tools: 3, todo: null, line: 'Implementing the brief', meta: '3 cmds \u00b7 1m 0s' },
+  { ...view.rows[0]!, id: 'cx-helper', name: 'Review', state: 'completed', codex: true, depth: 1, tools: 9, todo: null, line: 'sentinel reviewer', meta: '9 cmds \u00b7 2m 0s' }
+]
+const renderCodex = (surface: string, columns?: number) => {
+  const nodes: Node[] = []
+  const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+  const tree = drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg'), Button: component('Button') }, surface,
+    { ...view, codex: cxRows(), ready: 1 }, columns) as unknown as Node
+  return { nodes, tree }
+}
+
+test('desktop Codex has a quiet section header, badge, helper indentation and inclusive totals', () => {
+  const { nodes } = renderCodex('desktop')
+  const texts = nodes.filter(n => n.type === 'Text').map(nodeText)
+  expect(texts.some(t => t.includes('3 agents, 1 working'))).toBe(true)
+  expect(texts.some(t => t.includes('1 ready for review'))).toBe(true)
+  expect(texts).toContain('Codex \u00b7 1 run')
+  expect(nodes.filter(n => n.type === 'Button')).toHaveLength(0)
+  const animal = nodes.filter(n => n.type === 'Svg' && n.props.height === 36)
+  expect(animal).toHaveLength(3)
+  expect(animal.slice(1).every(n => n.props.source.includes('data-codex="true"'))).toBe(true)
+  expect(animal[0]!.props.source.includes('data-codex')).toBe(false)
+  expect(nodes.some(n => n.type === 'Box' && n.props.paddingLeft === 4 && n.props.paddingRight === 2)).toBe(true)
+  expect(texts.some(t => t.includes('3 cmds'))).toBe(true)
+})
+
+test('Codex terminal badge stays trailing inside allocated cells at every width 1 through 200', () => {
+  for (let columns = 1; columns <= 200; columns++) {
+    const { nodes, tree } = renderCodex('terminal', columns)
+    expect(tree.props.width).toBe(columns - 1)
+    for (const row of cxRows()) {
+      const agent = nodes.find(n => n.props.key === row.id)!
+      expect(!!agent).toBe(true)
+      const first = children(agent)[0]!
+      const pieces = children(first)
+      expect(pieces.reduce((sum, part) => sum + part.props.width, 0) <= columns - 1).toBe(true)
+      expect(pieces.every(p => p.props.width >= 0)).toBe(true)
+      if (columns >= 24) expect(nodeText(first).endsWith(' >_')).toBe(true)
+      if ([24, 44, 64].includes(columns)) {
+        expect(nodeText(children(agent)[1]!)).toContain(row.line)
+        expect(nodes.filter(n => n.type === 'Text').map(nodeText)).toContain('Codex \u00b7 1 run')
+      }
+    }
+  }
+})
+
+test('Codex pictures retain their ids on count redraws and remove cleanly with the lane', () => {
+  const a = renderCodex('desktop').nodes.filter(n => n.type === 'Svg' && n.props.height === 36).map(n => n.props.source)
+  const b = renderCodex('desktop').nodes.filter(n => n.type === 'Svg' && n.props.height === 36).map(n => n.props.source)
+  expect(a).toEqual(b)
+  expect(pictureCount()).toBe(3)
+  renderTerminal()
+  expect(pictureCount()).toBe(1)
+})
+
+test('Codex retains the approved terminal tiers when badge and indentation fit', () => {
+  for (const columns of [24, 44, 64]) {
+    const { nodes } = renderCodex('terminal', columns)
+    const row = nodes.find(n => n.props.key === 'cx-helper')!
+    const first = children(row)[0]!
+    const pieces = children(first)
+    expect(pieces.some(p => p.props.key === 'bar')).toBe(true)
+    if (columns >= 44) expect(nodeText(first)).toContain('Done')
+    if (columns >= 64) expect(nodeText(first)).toContain('9 cmds')
+  }
+})

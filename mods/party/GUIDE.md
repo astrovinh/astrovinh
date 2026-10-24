@@ -10,7 +10,7 @@ A session only shows up if the Party mod is loaded in it. A session that was alr
 
 Your current session's agents are shown first. Other sessions start folded into a row of tiny animals. Press a session's name to show or hide its agents. In the terminal, Party uses plain text instead of pictures.
 
-The status line under the prompt gives a quick count, such as `party: 2 working, 1 needs you`. With two blocked agents it says `party: 2 working, 2 need you`. It clears when no agents are working or blocked.
+The status line under the prompt gives a quick count, such as `party: 2 working, 1 needs you`. With two blocked agents it says `party: 2 working, 2 need you`. It clears when no agents are working, blocked, or ready for review.
 
 ## What a row shows
 
@@ -19,6 +19,18 @@ Each row has an animal, a status, and a short line about its work. The line come
 When an agent writes a to-do list, the thin bar shows how many steps are done. For example, `3/5` means 3 of 5 steps are done. Without a to-do list, a working row has a steady sweep, tools used, and elapsed time. Party never guesses a percentage or a finish time. With motion off, the sweep stops and the bar stays still.
 
 Agents keep their animals and their place in the list as their status changes. Finished agents stay for five minutes. Party shows up to 12 rows per session, with a count when there are more.
+
+## Codex runs
+
+Local Codex runs appear in their own section with a `>_` badge. Bruno is the first builder, Pan is the first reviewer, and Pip is the first helper. Helpers nest below their run. Other runs of the same job use spare animals.
+
+Rows show commands run and elapsed time. A run is Working when it has activity within 45 seconds, Idle after that, and Done when Codex reports completion. Party never guesses that it failed or is stuck. Finished rows stay for five minutes, and up to eight runs appear.
+
+A completed run adds "ready for review" to the header and the line under your prompt. That notice stays until your next message in this session, even after the row expires. Slash commands leave the notice in place. Other sessions keep their own notices.
+
+Codex is on by default. `/party codex off` hides the lane at once; `/party codex on` shows it again. Other loaded sessions pick up the setting on their next refresh. If the scanner is unavailable, Party keeps the last good view.
+
+The scanner reads local Codex session logs. It checks the first user message only for a brief filename, such as `task-38-brief.md`, and keeps `task-38` as the label. It never displays or saves messages, command text, code, or log paths. Nothing leaves your Mac. Only run facts and numeric or hashed file markers enter the local cache.
 
 ## Meet the animals
 
@@ -68,18 +80,19 @@ More agents of the same job use the spare animals again with their other coats. 
 - `/party size tiny`: 24 px animals and 16 px folded animals.
 - `/party size small`: 36 px animals and 24 px folded animals. This is the default.
 - `/party size medium`: 48 px animals and 32 px folded animals.
+- `/party codex on|off`: show or hide local Codex runs. On is the default.
 - `/party help`: list the commands.
 
-Unknown commands show the same help. Motion and size apply immediately in the current panel and are saved for every session on this Mac. Other loaded sessions pick them up on their next refresh, usually within 3 seconds when shown or 10 seconds when hidden. Help and settings commands leave the panel open or closed as it was.
+Unknown commands show the same help. Motion, size, and Codex settings apply immediately in the current panel and are saved for every session on this Mac. Other loaded sessions pick them up on their next refresh, usually within 3 seconds when shown or 10 seconds when hidden. Help and settings commands leave the panel open or closed as it was.
 
 ## Privacy
 
 - Nothing leaves your Mac. Party sends no network requests.
-- No prompts or replies are read or stored.
+- No prompts or replies are stored. The Codex scanner checks the first user message only for a brief filename.
 - Party uses agent IDs, types, status, task descriptions, tool kinds and counts, elapsed time, and to-do status and active step names.
 - It uses session IDs and repo or folder names to group agents.
-- It saves local session summaries, the panel pin, motion, and size in Claude Code's shared plugin store.
-- It does not read file contents, command text, search text, or other tool arguments. From a to-do update it keeps only step status and the active step name.
+- It saves local session summaries, the panel pin, motion, size, and Codex setting in Claude Code's shared plugin store.
+- The Claude lane does not read file contents, command text, search text, or other tool arguments. From a to-do update it keeps only step status and the active step name. Codex run facts stay outside the shared plugin store.
 
 ## If something looks wrong
 

@@ -682,3 +682,274 @@ test('terminal render hook applies viewport columns to its row layout', async ()
     expect(meters.every(n => n.props.width === bar)).toBe(true)
   }
 })
+
+const codexContext = () => {
+  const p = stampedContext()
+  let now = NOW
+  const scan = { calls: 0, exists: true, fail: false, result: JSON.stringify({ runs: [{ id: 'cx', parentId: null, kind: 'run', role: null, nickname: null, label: 'task-39', startedAt: NOW - 60000, lastAt: NOW, cmds: 4, spawned: 0, done: false, tokens: null }] }), wait: null as Promise<any> | null }
+  const resolver = { calls: 0, output: '', fail: false, exitCode: 0, truncated: false, argv: [] as string[][] }
+  const scanArgv: string[][] = []
+  const statuses: (string | undefined)[] = []
+  p.context.clock.now = async () => now
+  p.context.ui.status = async (text?: string) => { statuses.push(text) }
+  const context = Object.assign(p.context, {
+    plugin: { root: '/synthetic/mod' },
+    env: { get: async () => '/synthetic/home' },
+    fs: { exists: async (_path: string) => scan.exists },
+    process: { run: async (args: string[], opts: any) => {
+      expect(opts).toEqual({ timeoutMs: 3000 })
+      if (args[0] === 'sh') {
+        resolver.calls++
+        resolver.argv.push(args)
+        if (resolver.fail) throw new Error('Synthetic resolver failure or timeout')
+        return { exitCode: resolver.exitCode, stdout: resolver.output, isStdoutTruncated: resolver.truncated }
+      }
+      scan.calls++
+      scanArgv.push(args)
+      if (scan.fail) throw new Error('Synthetic process failure or timeout')
+      if (scan.wait) return scan.wait
+      return { exitCode: 0, stdout: scan.result }
+    } }
+  })
+  const tick = async () => { await p.timers.filter(t => !t.cancelled && t.ms !== 1000).slice(-1)[0]!.fn() }
+  const start = () => hooks['session.start']!(context, { cwd: '/synthetic', surface: 'terminal', isInteractive: true }, async () => ({}))
+  return { ...p, context, scan, resolver, scanArgv, statuses, tick, start, now: (value: number) => { now = value } }
+}
+
+test('Codex scans only when enabled and the folder exists, without publishing runs', async () => {
+  const p = codexContext()
+  p.scan.exists = false
+  await p.start()
+  expect(p.scan.calls).toBe(0)
+  expect(p.resolver.calls).toBe(0)
+  p.scan.exists = true
+  await p.tick()
+  expect(p.scan.calls).toBe(1)
+  expect(p.view().codex!.map(r => r.id)).toEqual(['cx'])
+  expect(JSON.stringify(p.store['s:s1']).includes('cx')).toBe(false)
+  expect(p.statuses.slice(-1)[0]).toBe('party: 2 working, 0 need you')
+  await hooks['command.run']!(p.context, { ...command, args: 'codex off' }, async () => ({}))
+  expect(p.view().codex).toEqual([])
+  expect(p.store.codex).toBe(false)
+  await p.tick()
+  expect(p.scan.calls).toBe(1)
+})
+
+test('failed and malformed Codex scans retain the last good lane; idle transition redraws once', async () => {
+  const p = codexContext()
+  await p.start()
+  expect(p.view().codex).toHaveLength(1)
+  p.scan.fail = true
+  await p.tick()
+  expect(p.view().codex).toHaveLength(1)
+  p.scan.fail = false
+  p.scan.result = '{broken'
+  p.now(NOW + 45001)
+  await p.tick()
+  expect(p.view().codex![0]!.state).toBe('idle')
+})
+
+test('Codex scans never overlap and off hides the lane while a scan is in flight', async () => {
+  const p = codexContext()
+  await p.start()
+  let release!: (value: any) => void
+  p.scan.wait = new Promise(resolve => { release = resolve })
+  const pending = p.tick()
+  for (let i = 0; i < 40 && p.scan.calls < 2; i++) await Promise.resolve()
+  expect(p.scan.calls).toBe(2)
+  await p.tick()
+  expect(p.scan.calls).toBe(2)
+  p.context.agent.list = async () => { throw new Error('Unavailable') }
+  await hooks['command.run']!(p.context, { ...command, args: 'codex off' }, async () => ({}))
+  expect(p.view().codex).toEqual([])
+  release({ exitCode: 0, stdout: p.scan.result })
+  await pending
+  expect(p.view().codex).toEqual([])
+})
+
+test('non-slash prompt clears ready only in this session and late scans cannot revive it', async () => {
+  const p = codexContext()
+  p.scan.result = p.scan.result.replace('"done":false', '"done":true')
+  await p.start()
+  expect(p.view().ready).toBe(1)
+  expect(p.statuses.slice(-1)[0]).toBe('party: 1 working, codex finished: ready for review')
+  await hooks['prompt.submit']!(p.context, { text: '/party help' }, async (e: any) => e)
+  expect(p.view().ready).toBe(1)
+  p.now(NOW + 300001)
+  await p.tick()
+  expect(p.view().codex).toEqual([])
+  expect(p.view().ready).toBe(1)
+  await hooks['prompt.submit']!(p.context, { text: 'Review it' }, async (e: any) => e)
+  expect(p.view().ready).toBe(0)
+  await p.tick()
+  expect(p.view().ready).toBe(0)
+  await p.start()
+  expect(p.view().ready).toBe(1)
+})
+
+test('a scan paused on settings cannot repopulate a new session with prior-generation facts', async () => {
+  const p = codexContext()
+  await p.start()
+  let releaseProcess!: (value: any) => void
+  let releaseSettings!: () => void
+  let entered = false
+  p.scan.wait = new Promise(resolve => { releaseProcess = resolve })
+  const pending = p.tick()
+  for (let i = 0; i < 40 && p.scan.calls < 2; i++) await Promise.resolve()
+  const original = p.context.state.get
+  const gate = new Promise<void>(resolve => { releaseSettings = resolve })
+  let pause = true
+  p.context.state.get = async ref => {
+    if (ref.key === 'settings' && pause) { pause = false; entered = true; await gate }
+    return original(ref)
+  }
+  releaseProcess({ exitCode: 0, stdout: p.scan.result.replace('"done":false', '"done":true') })
+  for (let i = 0; i < 40 && !entered; i++) await Promise.resolve()
+  expect(entered).toBe(true)
+  await p.start()
+  p.scan.fail = true
+  releaseSettings()
+  await pending
+  await p.tick()
+  expect(p.view().codex).toEqual([])
+  expect(p.view().ready).toBe(0)
+})
+
+test('an older redraw cannot restore the lane after a later codex off command', async () => {
+  const p = codexContext()
+  await p.start()
+  const set = (value: string) => hooks['command.run']!(p.context, { ...command, args: `codex ${value}` }, async () => ({}))
+  await set('off')
+  let release!: () => void
+  let entered = false
+  let pause = true
+  const gate = new Promise<void>(resolve => { release = resolve })
+  p.context.clock.now = async () => {
+    if (pause) { pause = false; entered = true; await gate }
+    return NOW
+  }
+  const pending = set('on')
+  for (let i = 0; i < 80 && !entered; i++) await Promise.resolve()
+  expect(entered).toBe(true)
+  await set('off')
+  release()
+  await pending
+  expect(p.view().codex).toEqual([])
+})
+
+test('a delayed ready status cannot undo a later prompt acknowledgement', async () => {
+  const p = codexContext()
+  await p.start()
+  p.scan.result = p.scan.result.replace('"done":false', '"done":true')
+  let release!: () => void
+  let entered = false
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const original = p.context.ui.status
+  p.context.ui.status = async text => {
+    if (text?.includes('ready for review') && !entered) { entered = true; await gate }
+    await original(text)
+  }
+  const pending = p.tick()
+  for (let i = 0; i < 100 && !entered; i++) await Promise.resolve()
+  expect(entered).toBe(true)
+  p.now(NOW + 1)
+  await hooks['prompt.submit']!(p.context, { text: 'Review it' }, async (e: any) => e)
+  expect(p.view().ready).toBe(0)
+  release()
+  await pending
+  expect(p.view().ready).toBe(0)
+  expect(p.statuses.slice(-1)[0]!.includes('ready for review')).toBe(false)
+})
+
+test('a delayed ready status cannot return after the session ends', async () => {
+  const p = codexContext()
+  await p.start()
+  p.scan.result = p.scan.result.replace('"done":false', '"done":true')
+  let release!: () => void
+  let entered = false
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const original = p.context.ui.status
+  p.context.ui.status = async text => {
+    if (text?.includes('ready for review') && !entered) { entered = true; await gate }
+    await original(text)
+  }
+  const pending = p.tick()
+  for (let i = 0; i < 100 && !entered; i++) await Promise.resolve()
+  expect(entered).toBe(true)
+  await hooks['session.end']!(p.context, { reason: 'other' }, async (e: any) => e)
+  release()
+  await pending
+  expect(p.statuses.slice(-1)[0]).toBe(undefined)
+})
+
+
+test('Python resolver runs once across many Codex refreshes and scans use the resolved executable', async () => {
+  const p = codexContext()
+  p.resolver.output = '/synthetic/real/bin/python3\n'
+  await p.start()
+  for (let i = 0; i < 5; i++) await p.tick()
+  expect(p.resolver.calls).toBe(1)
+  expect(p.resolver.argv[0]!.slice(0, 2)).toEqual(['sh', '-c'])
+  expect(p.scan.calls).toBe(6)
+  expect(p.scanArgv).toEqual(Array.from({ length: 6 }, () => ['/synthetic/real/bin/python3', '/synthetic/mod/bin/codex_scan.py']))
+  expect(p.view().codex).toHaveLength(1)
+})
+
+for (const failure of ['throw', 'exit', 'truncated', 'empty', 'relative', 'space', 'newline']) {
+  test(`a ${failure} Python resolver failure is cached as python3 and the Codex lane still renders`, async () => {
+    const p = codexContext()
+    p.resolver.fail = failure === 'throw'
+    p.resolver.exitCode = failure === 'exit' ? 1 : 0
+    p.resolver.truncated = failure === 'truncated'
+    p.resolver.output = failure === 'empty' ? '' : failure === 'relative' ? 'relative/python3' : failure === 'space' ? '/synthetic/with space/python3' : failure === 'newline' ? '/usr/bin/python3\n/other/python3' : '/synthetic/python3'
+    await p.start()
+    await p.tick()
+    expect(p.resolver.calls).toBe(1)
+    expect(p.scanArgv).toEqual(Array.from({ length: 2 }, () => ['python3', '/synthetic/mod/bin/codex_scan.py']))
+    expect(p.view().codex!.map(row => row.id)).toEqual(['cx'])
+  })
+}
+
+test('session.start resets the cached Python executable and resolves once more', async () => {
+  const p = codexContext()
+  p.resolver.output = '/synthetic/first/python3'
+  await p.start()
+  await p.tick()
+  p.resolver.output = '/synthetic/second/python3'
+  await p.start()
+  await p.tick()
+  expect(p.resolver.calls).toBe(2)
+  expect(p.scanArgv.map(args => args[0])).toEqual(['/synthetic/first/python3', '/synthetic/first/python3', '/synthetic/second/python3', '/synthetic/second/python3'])
+})
+
+for (const missing of [false, true]) {
+  test(`a ${missing ? 'not found' : 'generic'} Codex scan failure retains the lane and ${missing ? 'resets' : 'keeps'} the Python cache`, async () => {
+    const p = codexContext()
+    p.resolver.output = '/synthetic/first/python3'
+    await p.start()
+    p.scan.wait = Promise.reject(new Error(missing ? 'Executable not found' : 'Synthetic process failure'))
+    await p.tick()
+    expect(p.view().codex).toHaveLength(1)
+    p.scan.wait = null
+    p.resolver.output = '/synthetic/second/python3'
+    await p.tick()
+    expect(p.resolver.calls).toBe(missing ? 2 : 1)
+    expect(p.scanArgv.slice(-1)[0]![0]).toBe(missing ? '/synthetic/second/python3' : '/synthetic/first/python3')
+    expect(p.view().codex).toHaveLength(1)
+  })
+}
+
+
+test('a not found scan exit clears the Python cache while preserving the last lane', async () => {
+  const p = codexContext()
+  p.resolver.output = '/synthetic/first/python3'
+  await p.start()
+  p.scan.wait = Promise.resolve({ exitCode: 127, stdout: '', stderr: 'python: not found' })
+  await p.tick()
+  expect(p.view().codex).toHaveLength(1)
+  p.scan.wait = null
+  p.resolver.output = '/synthetic/second/python3'
+  await p.tick()
+  expect(p.resolver.calls).toBe(2)
+  expect(p.scanArgv.slice(-1)[0]![0]).toBe('/synthetic/second/python3')
+})

@@ -50,7 +50,12 @@ export function needsYou(count: number): string {
   return `${count === 1 ? 'needs' : 'need'} you`
 }
 
-export function statusLine(sessions: SessionView[]): string | undefined {
-  const { working, blocked } = summary(sessions)
-  return working || blocked ? `party: ${working} working, ${blocked} ${needsYou(blocked)}` : undefined
+export function statusLine(sessions: SessionView[], codex = { working: 0, ready: 0 }): string | undefined {
+  const counts = summary(sessions)
+  const working = counts.working + codex.working
+  const blocked = counts.blocked
+  const base = working || blocked ? `party: ${working} working, ${blocked} ${needsYou(blocked)}` : undefined
+  if (!codex.ready) return base
+  const activity = blocked ? `${working} working, ${blocked} ${needsYou(blocked)}, ` : working ? `${working} working, ` : ''
+  return `party: ${activity}codex finished: ready for review`
 }

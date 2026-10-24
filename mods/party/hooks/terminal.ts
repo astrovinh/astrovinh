@@ -32,7 +32,7 @@ export function terminalMeta(layout: TerminalRowLayout, row: AgentRow, now: numb
   const progress = row.todo ? `${row.todo.done}/${row.todo.total}` : ''
   if (layout.tier === 'tiny') return time
   if (layout.tier === 'narrow') return progress || time
-  return [progress, layout.tools ? `${row.tools} ${row.tools === 1 ? 'tool' : 'tools'}` : '', time].filter(Boolean).join(layout.tools ? ' \u00b7 ' : ' ')
+  return [progress, layout.tools ? row.codex ? `${row.tools} cmds` : `${row.tools} ${row.tools === 1 ? 'tool' : 'tools'}` : '', time].filter(Boolean).join(layout.tools ? ' \u00b7 ' : ' ')
 }
 
 /** Solid progress is measured, sweeping progress is activity, dotted progress is unknown. */

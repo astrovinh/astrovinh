@@ -1,11 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
-import type { AgentRecord, AgentStats, MainFacts, PartySettings, PartySize, RosterView, SessionSnapshot, SessionView } from '../types'
+import type { AgentRecord, AgentStats, CodexAck, CodexRun, MainFacts, PartySettings, PartySize, RosterView, SessionSnapshot, SessionView } from '../types'
 import { drawPanel } from './draw'
 import { buildRows, cleanTodos, elapsed, rememberAgents, toolKind } from './roster'
 import { mergeSessions, statusLine } from './sessions'
 import { followAction, paneStateOf, pinnedAfterClose } from './pin'
 import { COMMANDS, DEFAULT_SETTINGS } from './settings'
+import { parseScan, codexRows, observeCodex, acknowledgeCodex, pythonResolveArgv, pickPython } from './codex'
 
 const PANE = 'party'
 const EMPTY: RosterView = { rows: [], total: 0, working: 0, blocked: 0, overflow: 0, now: 0, session: '' }
@@ -32,19 +33,32 @@ let publishedAt = 0
 let publishing = false
 let lastStatus: string | null = null
 let settingsRevision = 0
+let codexRuns: CodexRun[] = []
+let codexAck: CodexAck = { through: 0, ready: {} }
+let codexScanning = false
+let codexRevision = 0
+let resolvedPython: string | undefined
+let lastView: RosterView | null = null
+let redrawRevision = 0
 
 async function syncSettings($: any) {
   const revision = ++settingsRevision
   const motion = await $.store.get('motion')
   const size = await $.store.get('size')
+  const codex = await $.store.get('codex')
   const next: PartySettings = {
     motion: typeof motion === 'boolean' ? motion : DEFAULT_SETTINGS.motion,
-    size: size === 'tiny' || size === 'small' || size === 'medium' ? size : DEFAULT_SETTINGS.size
+    size: size === 'tiny' || size === 'small' || size === 'medium' ? size : DEFAULT_SETTINGS.size,
+    ...(codex === false ? { codex: false } : {})
   }
   const current = await read($, settings)
   if (revision !== settingsRevision) return
-  if (current.motion !== next.motion || current.size !== next.size) {
+  if (current.motion !== next.motion || current.size !== next.size || current.codex !== next.codex) {
     await update($, settings, previous => revision === settingsRevision ? next : previous)
+    if (current.codex !== next.codex) {
+      codexRevision += 1
+      await redrawLast($)
+    }
   }
 }
 
@@ -153,24 +167,92 @@ const refresh = async ($: any, followPin = true) => {
     const counts = { total: local.total, working: local.working, blocked: local.blocked, overflow: local.overflow }
     const sessions = mergeSessions({ ...own, counts }, await otherSessions($, now), now)
     if (!active || cycle !== generation) return
-    const view = { ...local, now, session, sessions }
-    const status = statusLine(sessions)
-    if (lastStatus !== (status ?? '')) {
-      try { await $.ui.status(status); lastStatus = status ?? '' } catch {}
-    }
+    await scanCodex($, cycle)
     if (!active || cycle !== generation) return
-    // Elapsed labels and unmeasured activity are the only clock-driven redraws.
-    const nextSignature = JSON.stringify({ ...view, now: undefined,
-      sweep: sessions.some(s => s.agents.some(r => r.state === 'running' && !r.todo)) ? Math.floor(now / 3000) : undefined,
-      sessions: sessions.map(s => ({ ...s, at: undefined, times: s.agents.map(r => elapsed((r.endedAt ?? now) - r.startedAt)) })) })
-    if (signature !== nextSignature) {
-      await update($, roster, () => view)
-      if (cycle === generation) signature = nextSignature
-    }
+    lastView = { ...local, now, session, sessions }
+    await redrawLast($)
   } catch {
     // Preserve the last good picture and retry on the next interval.
   } finally {
     refreshing = false
+  }
+}
+
+
+async function scanCodex($: any, cycle: number) {
+  if (codexScanning || (await read($, settings)).codex === false) return
+  codexScanning = true
+  const revision = codexRevision
+  try {
+    const home = await $.env.get('HOME')
+    if (!home || !await $.fs.exists(`${home}/.codex/sessions`)) return
+    if (resolvedPython === undefined) {
+      let python = 'python3'
+      try {
+        const result = await $.process.run(pythonResolveArgv(), { timeoutMs: 3000 })
+        if (result.exitCode === 0 && !result.isStdoutTruncated) {
+          python = pickPython(result.stdout.replace(/\r?\n$/, ''), '')
+        }
+      } catch {
+        // Resolution is optional: a failure still allows the scanner to run.
+      }
+      if (!active || cycle !== generation) return
+      resolvedPython = python
+    }
+    const result = await $.process.run([resolvedPython, `${$.plugin.root}/bin/codex_scan.py`], { timeoutMs: 3000 })
+    const enabled = (await read($, settings)).codex !== false
+    if (!active || cycle !== generation || revision !== codexRevision || !enabled) return
+    if (result.exitCode !== 0) {
+      if (/not found/i.test(result.stderr ?? '')) resolvedPython = undefined
+      return
+    }
+    if (result.isStdoutTruncated) return
+    const runs = parseScan(result.stdout)
+    if (runs !== null) {
+      codexRuns = runs
+      codexAck = observeCodex(runs, codexAck)
+    }
+  } catch (error) {
+    if (cycle === generation && /not found/i.test(String(error))) resolvedPython = undefined
+    // Missing Python, denied process calls and timeouts preserve the last good facts.
+  } finally { codexScanning = false }
+}
+
+async function redrawLast($: any) {
+  const revision = ++redrawRevision
+  if (!active || !lastView) return
+  const cycle = generation
+  const current = () => active && cycle === generation && revision === redrawRevision
+  const enabled = (await read($, settings)).codex !== false
+  const now = await $.clock.now()
+  if (!current()) return
+  const codex = enabled ? codexRows(codexRuns, now, codexAck) : []
+  const ready = enabled ? Object.keys(codexAck.ready).length : 0
+  const sessions = lastView.sessions ?? []
+  const view = { ...lastView, now, codex, ready }
+  const status = statusLine(sessions, { working: codex.filter(row => row.state === 'running').length, ready })
+  if (lastStatus !== (status ?? '')) {
+    try {
+      await $.ui.status(status)
+      if (!current()) {
+        // A slower status call may have landed after a newer prompt or setting.
+        if (!active || !lastView) {
+          try { await $.ui.status(undefined) } catch {}
+        }
+        lastStatus = null
+        await redrawLast($)
+        return
+      }
+      lastStatus = status ?? ''
+    } catch {}
+  }
+  if (!current()) return
+  const nextSignature = JSON.stringify({ ...view, now: undefined,
+    sweep: sessions.some(s => s.agents.some(r => r.state === 'running' && !r.todo)) || codex.some(r => r.state === 'running') ? Math.floor(now / 3000) : undefined,
+    sessions: sessions.map(s => ({ ...s, at: undefined, times: s.agents.map(r => elapsed((r.endedAt ?? now) - r.startedAt)) })) })
+  if (signature !== nextSignature) {
+    await update($, roster, previous => current() ? view : previous)
+    if (current()) signature = nextSignature
   }
 }
 
@@ -192,6 +274,11 @@ export const register: Register = on => {
       published = ''
       publishedAt = 0
       lastStatus = null
+      lastView = null
+      codexRuns = []
+      codexAck = { through: 0, ready: {} }
+      codexRevision += 1
+      resolvedPython = undefined
       const now = await $.clock.now()
       main = { startedAt: now, endedAt: now, working: false }
       const repo = await $.session.repo().catch(() => null)
@@ -221,6 +308,10 @@ export const register: Register = on => {
       published = ''
       publishedAt = 0
       lastStatus = null
+      lastView = null
+      codexRuns = []
+      codexAck = { through: 0, ready: {} }
+      codexRevision += 1
     } else {
       timer?.cancel()
       heartbeat?.cancel()
@@ -256,16 +347,25 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('prompt.submit', async ($, e, next) => {
+    if (!e.text.trimStart().startsWith('/')) {
+      try { codexAck = acknowledgeCodex(codexAck, await $.clock.now()); await redrawLast($) } catch {}
+    }
+    return next(e)
+  })
+
   on('command.run', { command: PANE }, async ($, e) => {
     const args = e.args.trim().split(/\s+/)
     if (args[0]) {
       const [name, value] = args
       const motion = name === 'motion' && (value === 'on' || value === 'off')
+      const codex = name === 'codex' && (value === 'on' || value === 'off')
       const size = name === 'size' && (value === 'tiny' || value === 'small' || value === 'medium')
-      if (args.length !== 2 || (!motion && !size)) return { text: COMMANDS }
+      if (args.length !== 2 || (!motion && !size && !codex)) return { text: COMMANDS }
       try {
         // Separate keys keep a size change from overwriting another session's motion choice.
-        if (motion) await $.store.set('motion', value === 'on')
+        if (codex) await $.store.set('codex', value === 'on')
+        else if (motion) await $.store.set('motion', value === 'on')
         else await $.store.set('size', value as PartySize)
         await syncSettings($)
         return { text: `Party ${name} ${value}.` }

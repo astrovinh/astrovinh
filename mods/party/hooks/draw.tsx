@@ -19,10 +19,10 @@ export function meterWidth(columns?: number, animalSize = 36): number {
 
 function picture(row: AgentRow, session: string, still: boolean, size: number) {
   const id = `${session}:${row.id}`
-  const key = `${row.animal}:${row.state}:${row.tool}:${still}:${size}`
+  const key = `${row.animal}:${row.state}:${row.tool}:${still}:${size}:${!!row.codex}`
   let entry = pictures.get(id)
   if (entry?.key !== key) {
-    entry = { key, art: animalSvg(row.animal, row.state, row.tool, size / 12, { still }) }
+    entry = { key, art: animalSvg(row.animal, row.state, row.tool, size / 12, { still, codex: row.codex }) }
     pictures.set(id, entry)
   }
   return entry!.art
@@ -45,8 +45,13 @@ export function bar(row: AgentRow, still = false) {
 
 export function drawPanel(ui: any, surface: string, view: RosterView, columns?: number) {
   const sessions = view.sessions ?? [{ id: '', label: view.session, at: view.now, agents: view.rows, counts: { total: view.total, working: view.working, blocked: view.blocked, overflow: view.overflow } }]
+  const codex = view.codex ?? []
+  const ready = view.ready ?? 0
   const totals = sessionSummary(sessions)
+  totals.total += codex.length
+  totals.working += codex.filter(row => row.state === 'running').length
   const ids = new Set(sessions.flatMap(s => s.agents.map(row => `${s.id}:${row.id}`)))
+  for (const row of codex) ids.add(`codex:${row.id}`)
   for (const id of pictures.keys()) if (!ids.has(id)) pictures.delete(id)
   const { Box, Text, Svg, Button } = ui
   const { motion, size } = view.settings ?? DEFAULT_SETTINGS
@@ -56,22 +61,27 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
   const animation = motion ? { isInteractive: true } : {}
   const dividerWidth = meterWidth(columns, animalSize) + animalSize + 8
   const terminal = surface !== 'desktop'
-  const layout = terminalRowLayout(columns)
   const terminalWidth = columns === undefined ? undefined : Math.max(0, columns - 1)
   const terminalPadding = Math.min(2, Math.floor((terminalWidth ?? 4) / 2))
   const terminalProps = terminal ? { width: terminalWidth, minWidth: 0 } : {}
   const truncate = terminal ? { wrap: 'truncate' } : {}
   const summaryText = `${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`
-  const attention = totals.blocked ? ` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}` : ''
+  const attention = (totals.blocked ? ` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}` : '') + (ready ? ` \u00b7 ${ready} ready for review` : '')
   const sessionText = `${totals.sessions} ${totals.sessions === 1 ? 'session' : 'sessions'}`
   const showSessions = columns === undefined || summaryText.length + attention.length + 2 + sessionText.length <= columns - 1
-  const summary = terminal ? null : <Text color={COLOR.second}>{`${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`}{totals.blocked ? <Text color={COLOR.waiting}>{` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}`}</Text> : null}</Text>
+  const summary = terminal ? null : <Text color={COLOR.second}>{`${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`}{attention ? <Text color={COLOR.waiting}>{attention}</Text> : null}</Text>
   // Both local and expanded foreign sessions use this exact streamlined row renderer.
   const drawRows = (rows: AgentRow[], overflow: number, sessionId: string) => (
     <Box key={`session:${sessionId}`} flexDirection="column">
       {rows.map((row, index) => {
         const time = elapsed((row.endedAt ?? view.now) - row.startedAt)
         if (terminal) {
+          const available = terminalWidth ?? 80
+          const badgeWidth = row.codex ? Math.min(3, available) : 0
+          const indent = row.codex ? Math.min(row.depth ?? 0, Math.max(0, available - badgeWidth)) : 0
+          let layout = terminalRowLayout(columns)
+          if (row.codex && columns !== undefined && rowWidth(layout, row) + badgeWidth + indent > available) layout = terminalRowLayout(Math.max(1, columns - badgeWidth - indent))
+          const contentWidth = Math.max(0, available - badgeWidth - indent)
           const width = rowWidth(layout, row)
           const meta = terminalMeta(layout, row, view.now)
           const metaWidth = width - (2 + 1 + layout.name + (layout.status ? 1 + 7 : 0) + (layout.bar ? 1 + layout.bar : 0) + 1)
@@ -81,11 +91,12 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
           const gap = (key: string) => piece(key, ' ', 1)
           return (
             <Box key={row.id} flexDirection="column" {...terminalProps}>
-              <Box width={Math.min(width, terminalWidth ?? width)} minWidth={0}>
+              <Box width={Math.min(width, contentWidth) + badgeWidth + indent} minWidth={0}>
+                {indent ? piece('indent', ' '.repeat(indent), indent) : null}
                 {layout.tier === 'tiny' ? piece('tiny', [
                   `${ANIMAL_EMOJI[row.animal]} ${row.name.slice(0, layout.name).padEnd(layout.name)} `,
                   <Text key="meta" color={COLOR.quiet} dimColor wrap="truncate">{meta}</Text>
-                ], Math.min(width, terminalWidth ?? width), { color: COLOR.ink }) : [
+                ], Math.min(width, contentWidth), { color: COLOR.ink }) : [
                   piece('emoji', ANIMAL_EMOJI[row.animal], 2),
                   gap('after-emoji'),
                   piece('name', row.name, layout.name, { color: COLOR.ink }),
@@ -95,19 +106,20 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
                   gap('before-meta'),
                   piece('meta', meta, metaWidth, { color: COLOR.quiet, dimColor: true })
                 ]}
+                {badgeWidth ? piece('codex-badge', ' >_', badgeWidth, { color: '#8a8ad8' }) : null}
               </Box>
-              <Text color={COLOR.quiet} dimColor wrap="truncate">{`   ${row.line}`}</Text>
+              <Text color={COLOR.quiet} dimColor wrap="truncate">{`${' '.repeat(3 + indent)}${row.line}`}</Text>
               {row.note && (layout.tier === 'wide' || layout.tier === 'medium') ? <Text color={COLOR.quiet} dimColor wrap="truncate">{`   ${row.note}`}</Text> : null}
             </Box>
           )
         }
         const art = picture(row, sessionId, still, animalSize)
         const meter = bar(row, still)
-        const metadata = [row.todo ? `${row.todo.done}/${row.todo.total}` : row.tools ? `${row.tools} ${row.tools === 1 ? 'tool' : 'tools'}` : '', time].filter(Boolean).join(' \u00b7 ')
+        const metadata = row.codex ? row.meta : [row.todo ? `${row.todo.done}/${row.todo.total}` : row.tools ? `${row.tools} ${row.tools === 1 ? 'tool' : 'tools'}` : '', time].filter(Boolean).join(' \u00b7 ')
         return (
           <Box key={row.id} flexDirection="column">
             {index > 0 ? <Svg source={`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="1" viewBox="0 0 100 1" preserveAspectRatio="none"><rect width="100" height="1" fill="${COLOR.line}"/></svg>`} alt="" width={dividerWidth} height={1} /> : null}
-            <Box paddingX={2} paddingY={0} gap={1} alignItems="center" {...(row.state === 'waiting' ? { backgroundColor: '#2a2822' } : {})}>
+            <Box {...(row.codex && row.depth ? { paddingLeft: 2 + 2 * row.depth, paddingRight: 2 } : { paddingX: 2 })} paddingY={0} gap={1} alignItems="center" {...(row.state === 'waiting' ? { backgroundColor: '#2a2822' } : {})}>
               <Box flexShrink={0}><Svg {...animation} {...art} alt={`${art.alt}, ${row.role}`} width={animalSize} height={animalSize} /></Box>
               <Box flexDirection="column" flexGrow={1} minWidth={0}>
                 <Box justifyContent="space-between" gap={1}>
@@ -165,6 +177,12 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
           </Box>
         )
       })}
+      {codex.length ? <Box flexDirection="column" {...terminalProps}>
+        <Box paddingX={terminal ? terminalPadding : 2} paddingY={terminal ? 0 : 1} {...terminalProps}>
+          <Text color={COLOR.quiet} {...truncate}>{`Codex \u00b7 ${codex.filter(r => !r.depth).length} ${codex.filter(r => !r.depth).length === 1 ? 'run' : 'runs'}`}</Text>
+        </Box>
+        {drawRows(codex, 0, 'codex')}
+      </Box> : null}
     </Box>
   )
 }

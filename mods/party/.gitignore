@@ -1,2 +1,3 @@
 .claude-plugin/types/
 .probe.jsonl
+bin/__pycache__/
