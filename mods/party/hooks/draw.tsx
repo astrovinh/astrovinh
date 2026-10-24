@@ -4,6 +4,7 @@ import { elapsed, finished } from './roster'
 import { STATE_LABEL } from './roster-labels'
 import { needsYou, summary as sessionSummary } from './sessions'
 import { DEFAULT_SETTINGS, SIZE_PX } from './settings'
+import { ANIMAL_EMOJI, barCells, rowWidth, terminalMeta, terminalRowLayout } from './terminal'
 
 const COLOR = { session: '#242422', line: '#34332f', ink: '#f0efe9', second: '#c3c0b7', quiet: '#aaa69a', waiting: '#d6ba7b' }
 const DOT = { running: '#8cc9a1', waiting: '#d6ba7b', completed: '#94b7e8', failed: '#f2a3b2', idle: '#7b776c', pending: '#7b776c', killed: '#7b776c' }
@@ -53,18 +54,52 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
   const miniSize = animalSize * 2 / 3
   const animation = motion ? { isInteractive: true } : {}
   const dividerWidth = meterWidth(columns, animalSize) + animalSize + 8
-  const summary = <Text color={COLOR.second}>{`${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`}{totals.blocked ? <Text color={COLOR.waiting}>{` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}`}</Text> : null}</Text>
+  const terminal = surface !== 'desktop'
+  const layout = terminalRowLayout(columns)
+  const terminalWidth = columns === undefined ? undefined : Math.max(0, columns - 1)
+  const terminalPadding = Math.min(2, Math.floor((terminalWidth ?? 4) / 2))
+  const terminalProps = terminal ? { width: terminalWidth, minWidth: 0 } : {}
+  const truncate = terminal ? { wrap: 'truncate' } : {}
+  const summaryText = `${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`
+  const attention = totals.blocked ? ` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}` : ''
+  const sessionText = `${totals.sessions} ${totals.sessions === 1 ? 'session' : 'sessions'}`
+  const showSessions = columns === undefined || summaryText.length + attention.length + 2 + sessionText.length <= columns - 1
+  const summary = terminal ? null : <Text color={COLOR.second}>{`${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`}{totals.blocked ? <Text color={COLOR.waiting}>{` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}`}</Text> : null}</Text>
   // Both local and expanded foreign sessions use this exact streamlined row renderer.
   const drawRows = (rows: AgentRow[], overflow: number, sessionId: string) => (
     <Box key={`session:${sessionId}`} flexDirection="column">
       {rows.map((row, index) => {
         const time = elapsed((row.endedAt ?? view.now) - row.startedAt)
-        if (surface !== 'desktop') return (
-          <Box key={row.id} flexDirection="column">
-            <Text dimColor={finished(row.state)} color={row.state === 'waiting' ? COLOR.waiting : undefined}>{`${row.name} (${row.role})  ${STATE_LABEL[row.state]}  ${row.line}  ${row.tools} tools  ${time}`}</Text>
-            {row.note ? <Text dimColor>{row.note}</Text> : null}
-          </Box>
-        )
+        if (terminal) {
+          const width = rowWidth(layout, row)
+          const meta = terminalMeta(layout, row, view.now)
+          const metaWidth = width - (2 + 1 + layout.name + (layout.status ? 1 + 7 : 0) + (layout.bar ? 1 + layout.bar : 0) + 1)
+          const piece = (key: string, value: any, cells: number, props: any = {}) => (
+            <Box key={key} flexShrink={0} width={cells}><Text wrap="truncate" {...props}>{value}</Text></Box>
+          )
+          const gap = (key: string) => piece(key, ' ', 1)
+          return (
+            <Box key={row.id} flexDirection="column" {...terminalProps}>
+              <Box width={Math.min(width, terminalWidth ?? width)} minWidth={0}>
+                {layout.tier === 'tiny' ? piece('tiny', [
+                  `${ANIMAL_EMOJI[row.animal]} ${row.name.slice(0, layout.name).padEnd(layout.name)} `,
+                  <Text key="meta" color={COLOR.quiet} dimColor wrap="truncate">{meta}</Text>
+                ], Math.min(width, terminalWidth ?? width), { color: COLOR.ink }) : [
+                  piece('emoji', ANIMAL_EMOJI[row.animal], 2),
+                  gap('after-emoji'),
+                  piece('name', row.name, layout.name, { color: COLOR.ink }),
+                  ...(layout.status ? [gap('before-status'), piece('status', STATE_LABEL[row.state], 7, { color: DOT[row.state], dimColor: finished(row.state) })] : []),
+                  gap('before-bar'),
+                  piece('bar', barCells(row, layout.bar, view.now).filter(cell => cell.width > 0).map((cell, i) => <Text key={i} wrap="truncate" color={cell.color} dimColor={cell.dim}>{cell.glyph.repeat(cell.width)}</Text>), layout.bar),
+                  gap('before-meta'),
+                  piece('meta', meta, metaWidth, { color: COLOR.quiet, dimColor: true })
+                ]}
+              </Box>
+              <Text color={COLOR.quiet} dimColor wrap="truncate">{`   ${row.line}`}</Text>
+              {row.note && (layout.tier === 'wide' || layout.tier === 'medium') ? <Text color={COLOR.quiet} dimColor wrap="truncate">{`   ${row.note}`}</Text> : null}
+            </Box>
+          )
+        }
         const art = picture(row, sessionId, still, animalSize)
         const metadata = [row.todo ? `${row.todo.done}/${row.todo.total}` : row.tools ? `${row.tools} ${row.tools === 1 ? 'tool' : 'tools'}` : '', time].filter(Boolean).join(' \u00b7 ')
         return (
@@ -85,16 +120,17 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
           </Box>
         )
       })}
-      {overflow > 0 ? <Box paddingX={2}><Text dimColor>{`+${overflow} more agents`}</Text></Box> : null}
+      {overflow > 0 ? <Box paddingX={terminal ? terminalPadding : 2} {...terminalProps}><Text dimColor {...truncate}>{`+${overflow} more agents`}</Text></Box> : null}
     </Box>
   )
   return (
-    <Box flexDirection="column">
-      <Box flexDirection="column" paddingX={2} paddingY={1}>
-        <Box justifyContent="space-between">{surface === 'desktop' ? summary : <Text bold color={COLOR.ink}>Party</Text>}<Text color={COLOR.quiet}>{`${totals.sessions} ${totals.sessions === 1 ? 'session' : 'sessions'}`}</Text></Box>
-        {surface !== 'desktop' ? summary : null}
-      </Box>
-      {!totals.total ? <Box paddingX={2} paddingY={1}><Text dimColor>No agents yet. They show up here when Claude Code starts one.</Text></Box> : null}
+    <Box flexDirection="column" {...terminalProps}>
+      {terminal ? <Box {...terminalProps}><Text color={COLOR.second} wrap="truncate">{summaryText}{attention ? <Text color={COLOR.waiting} wrap="truncate">{attention}</Text> : null}{showSessions ? <Text color={COLOR.quiet} wrap="truncate">{`  ${sessionText}`}</Text> : null}</Text></Box> : (
+        <Box flexDirection="column" paddingX={2} paddingY={1}>
+          <Box justifyContent="space-between">{summary}<Text color={COLOR.quiet}>{`${totals.sessions} ${totals.sessions === 1 ? 'session' : 'sessions'}`}</Text></Box>
+        </Box>
+      )}
+      {!totals.total ? <Box paddingX={terminal ? terminalPadding : 2} paddingY={1} {...terminalProps}><Text dimColor {...truncate}>No agents yet. They show up here when Claude Code starts one.</Text></Box> : null}
       {sessions.map((s, index) => {
         const counts = sessionSummary([s])
         const open = index === 0 || view.expanded?.includes(s.id)
@@ -103,13 +139,13 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
         return (
           <Box key={`group:${s.id}`} flexDirection="column">
             {index === 0 ? sessions.length > 1 ? (
-              surface !== 'desktop' ? <Box paddingX={2}><Text color={COLOR.quiet}>{`This session  ${agentCount}`}</Text></Box> : (
+              surface !== 'desktop' ? <Box paddingX={terminalPadding} {...terminalProps}><Text color={COLOR.quiet} wrap="truncate">{`This session  ${agentCount}`}</Text></Box> : (
                 <Box paddingX={2} paddingY={1} gap={1} alignItems="center" justifyContent="space-between">
                   <Text color={COLOR.quiet}>This session</Text>
                   <Text color={COLOR.quiet}>{agentCount}</Text>
                 </Box>
               )
-            ) : null : surface !== 'desktop' ? <Box paddingX={2}><Text color={COLOR.second}>{label}</Text></Box> : (
+            ) : null : surface !== 'desktop' ? <Box paddingX={terminalPadding} {...terminalProps}><Text color={COLOR.second} wrap="truncate">{label}</Text></Box> : (
               <Box key={`header:${s.id}`} paddingX={2} paddingY={1} gap={1} alignItems="center" justifyContent="space-between">
                 <Box gap={1} minWidth={0} flexGrow={1}>
                   <Button key={`expand:${s.id}`} plain label={label} onPress={() => {}} />

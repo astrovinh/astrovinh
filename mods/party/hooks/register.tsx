@@ -159,8 +159,9 @@ const refresh = async ($: any, followPin = true) => {
       try { await $.ui.status(status); lastStatus = status ?? '' } catch {}
     }
     if (!active || cycle !== generation) return
-    // A timestamp alone is not a reason to redraw. Compare only displayed time.
+    // Elapsed labels and unmeasured activity are the only clock-driven redraws.
     const nextSignature = JSON.stringify({ ...view, now: undefined,
+      sweep: sessions.some(s => s.agents.some(r => r.state === 'running' && !r.todo)) ? Math.floor(now / 3000) : undefined,
       sessions: sessions.map(s => ({ ...s, at: undefined, times: s.agents.map(r => elapsed((r.endedAt ?? now) - r.startedAt)) })) })
     if (signature !== nextSignature) {
       await update($, roster, () => view)

@@ -2,6 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { bar, drawPanel, meterWidth, pictureCount } from './draw'
 import { buildRows } from './roster'
 import type { AgentRow, SessionView } from '../types'
+import { ANIMAL_EMOJI, rowWidth, terminalRowLayout } from './terminal'
 
 const NOW = 1_800_000_000_000
 const view = { ...buildRows({ agents: [{ id: 'a', type: 'Explore', status: 'waiting', description: 'A long task', firstSeen: NOW - 48000, endedAt: null }], stats: { a: { tools: 4, tool: 'read', todos: [{ status: 'completed' }, { status: 'in_progress', activeForm: 'Reading code' }] } }, main: null, now: NOW }), now: NOW, session: 'astrovinh' }
@@ -369,10 +370,12 @@ test('terminal rows are text only and finished rows are dimmed', () => {
   const component = (type: string) => (props: any) => { nodes.push({ type, props }); return props.children ?? null }
   const r = { ...view, rows: view.rows.map(r => ({ ...r, state: 'completed' as const, endedAt: NOW })) }
   drawPanel({ Box: component('Box'), Text: component('Text'), Svg: () => { throw new Error('Terminal drew an SVG') } }, 'terminal', r)
-  expect(nodes.filter(n => n.type === 'Text' && textContent(n.props) === 'Party')).toHaveLength(1)
-  const row = nodes.find(n => [n.props.children].flat(Infinity).join('') === 'Hop (Scout)  Done  Reading code  4 tools  48s')
-  expect(row).toBeDefined()
-  expect(row!.props.dimColor).toBe(true)
+  expect(nodes.filter(n => n.type === 'Text' && textContent(n.props) === 'Party')).toHaveLength(0)
+  for (const content of ['Done', '   Reading code']) {
+    const text = nodes.find(n => textContent(n.props) === content)
+    expect(text).toBeDefined()
+    expect(text!.props.dimColor).toBe(true)
+  }
 })
 
 test('empty panels explain when agents appear', () => {
@@ -500,5 +503,135 @@ test('no row without a todo list ever claims a percentage or a step count on eit
       Svg: (props: any) => { texts.push(props.alt); return null } }, surface, { ...view, rows, total: rows.length })
     expect(texts.some(t => /%|\bpercent\b|\d+\s+of\s+\d+|\d+\/\d+/.test(t))).toBe(false)
     expect(texts.some(t => t.includes('3 tools'))).toBe(true)
+  }
+})
+
+const renderTerminal = (rows = view.rows, columns?: number, sessions?: SessionView[]) => {
+  const nodes: Node[] = []
+  const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+  const tree = drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg'), Button: component('Button') }, 'terminal',
+    { ...view, rows, total: rows.length, working: rows.filter(r => r.state === 'running').length, blocked: rows.filter(r => r.state === 'waiting').length, sessions }, columns) as unknown as Node
+  return { nodes, tree }
+}
+const terminalCells = (text: string) => [...text].reduce((n, c) => n + (c.codePointAt(0)! > 0xffff ? 2 : 1), 0)
+
+test('terminal agents have two truncating lines, emoji and separate nonshrinking columns instead of roles', () => {
+  const row = { ...view.rows[0]!, name: 'A name longer than its column' }
+  const { nodes } = renderTerminal([row], 64)
+  const agent = nodes.find(n => n.props.key === row.id)!
+  const parts = children(agent)
+  expect(parts.map(n => n.type)).toEqual(['Box', 'Text'])
+  const pieces = children(parts[0]!)
+  expect(pieces).toHaveLength(9)
+  for (const piece of pieces) {
+    expect(piece.type).toBe('Box')
+    expect(piece.props.flexShrink).toBe(0)
+    const text = children(piece)[0]!
+    expect(text.type).toBe('Text')
+    expect(text.props.wrap).toBe('truncate')
+  }
+  expect(nodeText(parts[0])).toContain(ANIMAL_EMOJI[row.animal])
+  expect(nodeText(agent).includes(`(${row.role})`)).toBe(false)
+  expect(nodeText(parts[1])).toBe(`   ${row.line}`)
+  expect(parts[1]!.props.color).toBe('#aaa69a')
+  expect(parts[1]!.props.dimColor).toBe(true)
+  expect(parts[1]!.props.wrap).toBe('truncate')
+  expect(nodes.some(n => n.type === 'Svg')).toBe(false)
+})
+
+test('terminal rows budget every rendered first-line cell across widths, long names, states and metadata', () => {
+  for (let columns = 1; columns <= 200; columns++) for (const state of ['running', 'waiting', 'pending', 'idle', 'completed', 'failed', 'killed'] as const) for (const todo of [null, { done: 3, total: 5 }]) {
+    const row = { ...view.rows[0]!, name: 'An exceptionally long animal name', state, todo, tools: 999, startedAt: NOW - (99 * 3600 + 59 * 60) * 1000 }
+    const { nodes, tree } = renderTerminal([row], columns)
+    expect(tree.props.width).toBe(columns - 1)
+    const agent = nodes.find(n => n.props.key === row.id)!
+    const first = children(agent)[0]!
+    expect(first.props.width <= columns - 1).toBe(true)
+    const layout = terminalRowLayout(columns)
+    if (layout.tier === 'tiny') {
+      expect(children(first)).toHaveLength(1)
+      expect(children(children(first)[0]!)[0]!.props.wrap).toBe('truncate')
+    } else {
+      const pieces = children(first)
+      const width = pieces.reduce((sum, part) => sum + part.props.width, 0)
+      expect(width).toBe(rowWidth(layout, row))
+      expect(width <= columns - 1).toBe(true)
+      for (const piece of pieces) {
+        const text = children(piece)[0]!
+        expect(terminalCells(nodeText(text)) <= piece.props.width || text.props.wrap === 'truncate').toBe(true)
+      }
+    }
+  }
+})
+
+test('terminal metadata progressively drops tools, then time with todos, then the bar', () => {
+  const row = { ...view.rows[0]!, tools: 999, todo: { done: 3, total: 5 }, startedAt: NOW - (99 * 3600 + 59 * 60) * 1000 }
+  for (const [columns, meta, bar] of [[64, '3/5 \u00b7 999 tools \u00b7 99h 59m', true], [44, '3/5 99h', true], [24, '3/5', true], [23, '99h', false]] as const) {
+    const { nodes } = renderTerminal([row], columns)
+    const first = children(nodes.find(n => n.props.key === row.id)!)[0]!
+    expect(nodeText(first)).toContain(meta)
+    expect(/[\u2500\u2501\u254c]/.test(nodeText(first))).toBe(bar)
+    if (columns < 44) expect(nodeText(first).includes('Blocked')).toBe(false)
+  }
+  expect(nodeText(children(renderTerminal([{ ...row, todo: null }], 24).nodes.find(n => n.props.key === row.id)!)[0])).toContain('99h')
+})
+
+test('terminal finished statuses stay dim, blocked stays amber and notes require room', () => {
+  for (const state of ['running', 'waiting', 'pending', 'idle', 'completed', 'failed', 'killed'] as const) for (const columns of [64, 44, 24, 23]) {
+    const row = { ...view.rows[0]!, state, todo: null, note: 'Reported state, activity unavailable' }
+    const { nodes } = renderTerminal([row], columns)
+    const parts = children(nodes.find(n => n.props.key === row.id)!)
+    expect(parts).toHaveLength(columns >= 44 ? 3 : 2)
+    const status = nodes.find(n => n.type === 'Text' && nodeText(n).trim() === ({ running: 'Working', waiting: 'Blocked', pending: 'Pending', idle: 'Idle', completed: 'Done', failed: 'Failed', killed: 'Stopped' })[state])
+    if (columns >= 44) {
+      expect(status).toBeDefined()
+      expect(!!status!.props.dimColor).toBe(['completed', 'failed', 'killed'].includes(state))
+      if (state === 'waiting') expect(status!.props.color).toBe('#d6ba7b')
+      expect(nodeText(parts[2])).toContain(row.note)
+      expect(parts[2]!.props.wrap).toBe('truncate')
+      expect(parts[2]!.props.color).toBe('#aaa69a')
+    }
+    if (state === 'waiting' && columns === 24) expect(nodes.some(n => n.type === 'Text' && n.props.color === '#d6ba7b' && nodeText(n).includes('\u254c'))).toBe(true)
+  }
+})
+
+test('terminal header is one truncating summary and only includes sessions when they fit', () => {
+  const rows = [view.rows[0]!, { ...view.rows[0]!, id: 'b', state: 'running' as const }]
+  for (const columns of [1, 24, 44, 64]) {
+    const { nodes, tree } = renderTerminal(rows, columns)
+    const header = children(tree)[0]!
+    expect(children(header).map(n => n.type)).toEqual(['Text'])
+    expect(nodeText(header)).toContain('2 agents, 1 working')
+    expect(nodeText(header).includes('Party')).toBe(false)
+    expect(nodeText(header).includes('1 session')).toBe(columns >= 64)
+    expect(children(header)[0]!.props.wrap).toBe('truncate')
+    expect(nodes.some(n => n.type === 'Text' && n.props.color === '#d6ba7b' && nodeText(n).includes('1 needs you'))).toBe(true)
+  }
+  for (const blocked of [1, 2]) {
+    const { tree } = renderTerminal(Array.from({ length: blocked }, (_, i) => ({ ...view.rows[0]!, id: String(i) })), 64)
+    expect(nodeText(children(tree)[0])).toContain(`${blocked} ${blocked === 1 ? 'needs' : 'need'} you`)
+  }
+})
+
+test('terminal session labels, descriptions, notes, overflow and empty text cannot wrap', () => {
+  const own = { id: 'own', label: 'Local', at: NOW, agents: [{ ...view.rows[0]!, note: 'Long note'.repeat(20) }], counts: { total: 15, working: 0, blocked: 1, overflow: 14 } }
+  const other = { id: 'other', label: 'A long repository label'.repeat(20), at: NOW, agents: view.rows }
+  for (const rows of [view.rows, []]) {
+    const { nodes } = renderTerminal(rows, 44, rows.length ? [own, other] : undefined)
+    for (const text of nodes.filter(n => n.type === 'Text')) expect(text.props.wrap).toBe('truncate')
+  }
+})
+
+test('tiny terminal metadata stays dim and session padding fits even below four cells', () => {
+  const row = { ...view.rows[0]!, startedAt: NOW - (99 * 3600 + 59 * 60) * 1000 }
+  const own = { id: 'own', label: 'Local', at: NOW, agents: [row], counts: { total: 15, working: 0, blocked: 1, overflow: 14 } }
+  const other = { id: 'other', label: 'Other', at: NOW, agents: [row] }
+  for (let columns = 1; columns < 24; columns++) {
+    const { nodes } = renderTerminal([row], columns, [own, other])
+    const meta = nodes.find(n => n.type === 'Text' && nodeText(n) === '99h')
+    expect(meta).toBeDefined()
+    expect(meta!.props.color).toBe('#aaa69a')
+    expect(meta!.props.dimColor).toBe(true)
+    for (const box of nodes.filter(n => n.type === 'Box' && n.props.paddingX)) expect(2 * box.props.paddingX <= columns - 1).toBe(true)
   }
 })

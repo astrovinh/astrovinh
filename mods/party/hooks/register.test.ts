@@ -596,3 +596,61 @@ test('settings commands redraw an already mounted engine pane without toggling i
     expect(p.calls).toEqual(['open'])
   } finally { await ui.unmount() }
 })
+
+test('three-second refreshes move a running terminal sweep within the same displayed minute', async () => {
+  const p = stampedContext()
+  let now = NOW
+  p.context.clock.now = async () => now
+  await hooks['session.start']!(p.context, start, async () => ({}))
+  now += 3600000
+  await p.refresh()
+  const before = p.view()
+  now += 3000
+  await p.timers.find(t => t.ms === 3000 && !t.cancelled)!.fn()
+  expect(p.view() === before).toBe(false)
+  expect(Math.floor((p.view().now - p.view().rows[1]!.startedAt) / 60000)).toBe(Math.floor((before.now - before.rows[1]!.startedAt) / 60000))
+})
+
+test('three-second refreshes leave an unchanged nonrunning roster alone', async () => {
+  const p = stampedContext()
+  let now = NOW
+  p.context.clock.now = async () => now
+  p.context.agent.list = async () => [{ id: 'a', type: 'Explore', description: 'Map hooks', status: 'waiting' }]
+  await hooks['session.start']!(p.context, start, async () => ({}))
+  now += 3600000
+  await p.refresh()
+  const before = p.view()
+  now += 3000
+  await p.timers.find(t => t.ms === 3000 && !t.cancelled)!.fn()
+  expect(p.view() === before).toBe(true)
+})
+
+test('a measured running row does not add a sweep redraw tick', async () => {
+  const p = stampedContext()
+  let now = NOW
+  p.context.clock.now = async () => now
+  await hooks['session.start']!(p.context, start, async () => ({}))
+  await hooks['tool.call']!(p.context, { agentId: 'a', tool: 'TodoWrite', todos: [{ status: 'in_progress' }] }, async () => ({}))
+  now += 3600000
+  await p.refresh()
+  const before = p.view()
+  now += 3000
+  await p.refresh()
+  expect(p.view() === before).toBe(true)
+})
+
+test('terminal render hook applies viewport columns to its row layout', async () => {
+  const p = stampedContext()
+  await hooks['session.start']!(p.context, start, async () => ({}))
+  const nodes: { type: string; props: any }[] = []
+  const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+  const context = { ...p.context, ui: { ...p.context.ui, resolve: () => ({ Box: component('Box'), Text: component('Text') }) } }
+  for (const [columns, bar] of [[24, 4], [44, 6], [64, 10]]) {
+    nodes.length = 0
+    const tree = await hooks['ui.render']!(context, { surface: 'terminal', viewport: { columns } }, async () => ({}))
+    expect(tree.props.width).toBe(columns! - 1)
+    const meters = nodes.filter(n => n.type === 'Box' && n.props.key === 'bar')
+    expect(meters).toHaveLength(2)
+    expect(meters.every(n => n.props.width === bar)).toBe(true)
+  }
+})
