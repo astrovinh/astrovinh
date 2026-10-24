@@ -37,7 +37,7 @@ export const SPECIES: Record<string, { rows: string[]; coats: string[][] }> = {
   },
   penguin: {
     rows: ['..DDDDDD..', '.DDDDDDDD.', 'DDLLDDLLDD', 'DDLELLELDD', 'DDLLBBLLDD', 'DLLLLLLLLD', 'DLLLLLLLLD', 'DDLLLLLLDD', '.DDLLLLDD.', '..BB..BB..'],
-    coats: [['#26282e', '#f4f4f0', '#26282e']]
+    coats: [['#26282e', '#f4f4f0', '#26282e'], ['#7d828a', '#e2e4e8', '#3a3d42']]
   }
 }
 const BASE_ANIMALS = {
@@ -51,7 +51,7 @@ const BASE_ANIMALS = {
   biscuit:{name: 'Biscuit',kind: 'dog',    coat: 0, bg: '#3a3a3e', role: 'Spare',         maps: 'A third agent of any job' },
   waddle:{ name: 'Waddle',kind: 'penguin', coat: 0, bg: '#2f4a3f', role: 'Spare',         maps: 'A fourth agent of any job' }
 };
-export const ANIMALS: Record<AnimalKey, { name: string; kind: string; coat: number; bg: string; role: string; maps: string }> = { ...BASE_ANIMALS, mochi2: { ...BASE_ANIMALS.mochi, coat: 2 }, biscuit2: { ...BASE_ANIMALS.biscuit, coat: 1 }, waddle2: { ...BASE_ANIMALS.waddle, coat: 0 } };
+export const ANIMALS: Record<AnimalKey, { name: string; kind: string; coat: number; bg: string; role: string; maps: string }> = { ...BASE_ANIMALS, ember2: { ...BASE_ANIMALS.ember, coat: 1 }, mochi2: { ...BASE_ANIMALS.mochi, coat: 2 }, biscuit2: { ...BASE_ANIMALS.biscuit, coat: 1 }, waddle2: { ...BASE_ANIMALS.waddle, coat: 1 } };
 
 const tr = (type: string, values: string, d: number, extra = '') => `<animateTransform attributeName="transform" type="${type}" values="${values}" dur="${d}s" repeatCount="indefinite" ${extra}/>`;
 const an = (attr: string, values: string, d: number, extra = '') => `<animate attributeName="${attr}" values="${values}" dur="${d}s" repeatCount="indefinite" ${extra}/>`;

@@ -246,8 +246,9 @@ test('render hook passes pane viewport columns through to the visible hairline w
       return null
     } }) } }
     await hooks['ui.render']!(context, { surface: 'desktop', viewport: columns === undefined ? undefined : { columns, rows: 40 } }, async () => ({}))
-    expect(meters).toHaveLength(2)
-    expect(meters.map(meter => [meter.width, meter.height])).toEqual([[width, 3], [width, 3]])
+    // The idle main row has no bar; only the running scout supplies a hairline.
+    expect(meters).toHaveLength(1)
+    expect(meters.map(meter => [meter.width, meter.height])).toEqual([[width, 3]])
   }
 })
 
@@ -271,9 +272,10 @@ test('publishes one compact session key only on roster change or the ten-second 
   const p = setup(on)
   await $.session.start(start)
   expect(p.published.filter(w => w.key.startsWith('s:'))).toHaveLength(1)
-  expect(Object.keys(p.store['s:s1']).sort()).toEqual(['agents', 'at', 'id', 'label'])
+  expect(Object.keys(p.store['s:s1']).sort()).toEqual(['agents', 'at', 'id', 'label', 'startedAt'])
   expect(p.store['s:s1'].id).toBe('s1')
   expect(p.store['s:s1'].label).toBe('party-test')
+  expect(p.store['s:s1'].startedAt).toBe(NOW)
   await $.command.run(command)
   await p.clock.advance(9000)
   expect(p.published.filter(w => w.key.startsWith('s:'))).toHaveLength(1)
@@ -285,6 +287,32 @@ test('publishes one compact session key only on roster change or the ten-second 
   await p.clock.advance(1000)
   expect(p.published.filter(w => w.key.startsWith('s:'))).toHaveLength(3)
   expect(p.published.filter(w => w.key.startsWith('s:')).every(w => w.value.agents.length <= 12)).toBe(true)
+})
+
+test('viewer retains foreign session starts and assigns its own lead without changing publication or counts', async ($, on) => {
+  const p = setup(on, { 's:z-older': { ...foreign('z-older'), startedAt: NOW - 1 },
+    's:a-newer': { ...foreign('a-newer'), startedAt: NOW + 1 } })
+  await $.session.start(start)
+  const sessions = p.state.roster.sessions!
+  expect(sessions[0]!.id).toBe('s1')
+  expect([...sessions].sort((a, b) => a.startedAt! - b.startedAt!).map(s => [s.id, s.startedAt, s.agents[0]!.animal])).toEqual([
+    ['z-older', NOW - 1, 'ember'], ['s1', NOW, 'mochi'], ['a-newer', NOW + 1, 'biscuit']
+  ])
+  expect(p.store['s:s1'].agents[0].animal).toBe('ember')
+  expect(sessions[0]!.counts).toEqual({ total: 2, working: 1, blocked: 0, overflow: 0 })
+  expect(p.statuses[p.statuses.length - 1]).toBe('party: 1 working, 2 need you')
+})
+
+test('session start timestamp stays fixed through heartbeats and later turns', async ($, on) => {
+  const p = setup(on)
+  await $.session.start(start)
+  await p.clock.advance(3600000)
+  expect(p.store['s:s1'].startedAt).toBe(NOW)
+  expect(p.store['s:s1'].at).toBe(NOW + 3600000)
+  await $.turn.start({ turnId: 'later', text: '' })
+  await $.command.run(command)
+  expect(p.store['s:s1'].startedAt).toBe(NOW)
+  expect(p.state.roster.sessions![0]!.startedAt).toBe(NOW)
 })
 
 test('heartbeat repairs an own key lost to another process without changing the roster', async ($, on) => {

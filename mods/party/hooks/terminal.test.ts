@@ -36,7 +36,7 @@ test('terminal tier boundaries preserve the approved names, bars and metadata', 
 })
 
 test('every animal has the matching two-cell terminal emoji', () => {
-  const expected: Record<AnimalKey, number> = { ember: 0x1f98a, hop: 0x1f430, sage: 0x1f989, bruno: 0x1f43b, pan: 0x1f43c, pip: 0x1f438, mochi: 0x1f431, mochi2: 0x1f431, biscuit: 0x1f436, biscuit2: 0x1f436, waddle: 0x1f427, waddle2: 0x1f427 }
+  const expected: Record<AnimalKey, number> = { ember: 0x1f98a, ember2: 0x1f98a, hop: 0x1f430, sage: 0x1f989, bruno: 0x1f43b, pan: 0x1f43c, pip: 0x1f438, mochi: 0x1f431, mochi2: 0x1f431, biscuit: 0x1f436, biscuit2: 0x1f436, waddle: 0x1f427, waddle2: 0x1f427 }
   for (const animal of Object.keys(ANIMALS) as AnimalKey[]) expect(ANIMAL_EMOJI[animal]).toBe(String.fromCodePoint(expected[animal]))
 })
 
@@ -79,8 +79,15 @@ test('running without todos sweeps one bright segment inside every bar and ping-
   expect(JSON.stringify(barCells(row, 10, 3000)) === JSON.stringify(barCells(row, 10, 0))).toBe(false)
 })
 
-test('waiting, pending and idle without todos never draw a partial fill', () => {
-  for (const state of ['waiting', 'pending', 'idle'] as const) for (let cells = 2; cells <= 12; cells++) {
+test('idle and pending without todos have no terminal bar cells', () => {
+  for (const state of ['idle', 'pending'] as const) for (let cells = 0; cells <= 12; cells++) {
+    expect(barCells({ ...row, state }, cells, NOW)).toEqual([])
+  }
+})
+
+test('waiting without todos keeps the dotted unknown terminal bar', () => {
+  for (let cells = 2; cells <= 12; cells++) {
+    const state = 'waiting'
     const runs = expanded(barCells({ ...row, state }, cells, NOW))
     expect(runs).toHaveLength(cells)
     expect(runs.every(c => c.glyph === '\u254c' && c.dim === true)).toBe(true)

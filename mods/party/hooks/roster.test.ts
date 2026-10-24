@@ -37,6 +37,13 @@ test('repeated spare animals gain lap numbers while the first agent keeps its sl
   }
 })
 
+test('animal assignment excludes both coats of a lead species and wraps only the remaining spares', () => {
+  const rows = Array.from({ length: 10 }, (_, i) => ({ id: String(i), slot: 'scout' as const }))
+  const assigned = assignAnimals(rows, new Set(['cat']))
+  expect(assigned.map(row => row.animal)).toEqual(['hop', 'biscuit', 'waddle', 'biscuit2', 'waddle2', 'biscuit', 'waddle', 'biscuit2', 'waddle2', 'biscuit'])
+  expect(assigned.map(row => row.name)).toEqual(['Hop', 'Biscuit', 'Waddle', 'Biscuit', 'Waddle', 'Biscuit 2', 'Waddle 2', 'Biscuit 2', 'Waddle 2', 'Biscuit 3'])
+})
+
 test('rows retain first-seen order when statuses change', () => {
   const first = [agent('a', 'running', NOW - 2), agent('b', 'pending', NOW - 1), agent('c', 'waiting', NOW)]
   const changed = [agent('c', 'completed', NOW), agent('a', 'waiting', NOW - 2), agent('b', 'running', NOW - 1)]

@@ -17,14 +17,16 @@ export function slotOf(type: string, isMain: boolean): Slot {
 }
 
 // Include expired agents in this input: their lifetime positions still reserve their animals.
-export function assignAnimals<T extends { id: string; slot: Slot }>(rows: T[]): (T & { animal: AnimalKey; name: string })[] {
+export function assignAnimals<T extends { id: string; slot: Slot; animalIndex?: number }>(rows: T[], exclude: ReadonlySet<string> = new Set()): (T & { animal: AnimalKey; name: string; animalIndex: number })[] {
   const count = new Map<Slot, number>()
+  const spares = SPARES.filter(key => !exclude.has(ANIMALS[key].kind))
   return rows.map(row => {
-    const n = count.get(row.slot) ?? 0
-    count.set(row.slot, n + 1)
-    const animal = n === 0 ? SLOT[row.slot] : SPARES[(n - 1) % SPARES.length]!
-    const lap = n === 0 ? 1 : Math.floor((n - 1) / SPARES.length) + 1
-    return { ...row, animal, name: `${ANIMALS[animal].name}${lap > 1 ? ` ${lap}` : ''}` }
+    // The publisher reserves lifetime positions before expired rows are removed.
+    const n = row.animalIndex ?? count.get(row.slot) ?? 0
+    count.set(row.slot, Math.max(count.get(row.slot) ?? 0, n + 1))
+    const animal = n === 0 ? SLOT[row.slot] : spares[(n - 1) % spares.length]!
+    const lap = n === 0 ? 1 : Math.floor((n - 1) / spares.length) + 1
+    return { ...row, animal, animalIndex: n, name: `${ANIMALS[animal].name}${lap > 1 ? ` ${lap}` : ''}` }
   })
 }
 
@@ -83,7 +85,7 @@ export function buildRows(input: RosterInput): Roster {
   for (const a of assigned) {
     if (a.endedAt !== null && now - a.endedAt >= 300000) continue
     const st = stats[a.id]
-    rows.push({ id: a.id, main: false, slot: a.slot, animal: a.animal, name: a.name, role: ROLE[a.slot], state: a.status,
+    rows.push({ id: a.id, main: false, slot: a.slot, animal: a.animal, animalIndex: a.animalIndex, name: a.name, role: ROLE[a.slot], state: a.status,
       line: todoLine(st?.todos) || a.description.trim() || (st ? phrase(st.tool) : STATE_LABEL[a.status]),
       tool: st?.tool ?? 'think', tools: st?.tools ?? 0, startedAt: a.firstSeen, endedAt: a.endedAt, todo: todoProgress(st?.todos),
       ...((a.teammateId || a.type === 'teammate') && !st ? { note: `Reported ${a.status}, activity unavailable` } : {}) })

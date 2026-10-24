@@ -29,6 +29,7 @@ function picture(row: AgentRow, session: string, still: boolean, size: number) {
 }
 
 export function bar(row: AgentRow, still = false) {
+  if (!row.todo && (row.state === 'idle' || row.state === 'pending')) return null
   let content = ''
   if (row.todo) {
     content = `<rect width="${100 * row.todo.done / row.todo.total}" height="3" rx="1.5" fill="${DOT[row.state]}"/>`
@@ -101,6 +102,7 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
           )
         }
         const art = picture(row, sessionId, still, animalSize)
+        const meter = bar(row, still)
         const metadata = [row.todo ? `${row.todo.done}/${row.todo.total}` : row.tools ? `${row.tools} ${row.tools === 1 ? 'tool' : 'tools'}` : '', time].filter(Boolean).join(' \u00b7 ')
         return (
           <Box key={row.id} flexDirection="column">
@@ -114,7 +116,7 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
                 </Box>
                 <Text color={COLOR.second} wrap="truncate">{row.line}</Text>
                 {row.note ? <Text dimColor color={COLOR.quiet} wrap="truncate">{row.note}</Text> : null}
-                <Svg {...animation} {...bar(row, still)} width={meterWidth(columns, animalSize)} height={3} />
+                {meter ? <Svg {...animation} {...meter} width={meterWidth(columns, animalSize)} height={3} /> : null}
               </Box>
             </Box>
           </Box>
@@ -152,7 +154,10 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
                   {counts.blocked ? <Text color={COLOR.waiting}>{needsYou(counts.blocked)}</Text> : null}
                 </Box>
                 <Box gap={0} flexShrink={0}>
-                  {open ? <Text color={COLOR.quiet}>hide</Text> : s.agents.map(row => <Svg key={row.id} {...animation} {...picture(row, s.id, still, miniSize)} width={miniSize} height={miniSize} />)}
+                  {open ? <Text color={COLOR.quiet}>hide</Text> : s.agents.map(row => {
+                    const art = picture(row, s.id, still, miniSize)
+                    return <Svg key={row.id} {...animation} {...art} alt={`${art.alt}, ${row.role}`} width={miniSize} height={miniSize} />
+                  })}
                 </Box>
               </Box>
             )}

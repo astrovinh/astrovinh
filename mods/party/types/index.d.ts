@@ -1,6 +1,6 @@
 export type AgentState = 'pending' | 'running' | 'waiting' | 'idle' | 'completed' | 'failed' | 'killed'
 export type Slot = 'lead' | 'scout' | 'planner' | 'builder' | 'reviewer' | 'helper'
-export type AnimalKey = 'ember' | 'hop' | 'sage' | 'bruno' | 'pan' | 'pip' | 'mochi' | 'biscuit' | 'waddle' | 'mochi2' | 'biscuit2' | 'waddle2'
+export type AnimalKey = 'ember' | 'ember2' | 'hop' | 'sage' | 'bruno' | 'pan' | 'pip' | 'mochi' | 'biscuit' | 'waddle' | 'mochi2' | 'biscuit2' | 'waddle2'
 export type ToolKind = 'read' | 'edit' | 'run' | 'think'
 export type PartySize = 'tiny' | 'small' | 'medium'
 export type PartySettings = { motion: boolean; size: PartySize }
@@ -18,6 +18,7 @@ export type AgentRow = {
   main: boolean
   slot: Slot
   animal: AnimalKey
+  animalIndex?: number
   name: string
   role: string
   state: AgentState
@@ -30,7 +31,7 @@ export type AgentRow = {
   note?: string
 }
 export type Roster = { rows: AgentRow[]; working: number; blocked: number; total: number; overflow: number }
-export type SessionSnapshot = { id: string; label: string; at: number; agents: AgentRow[] }
+export type SessionSnapshot = { id: string; label: string; at: number; startedAt?: number; agents: AgentRow[] }
 export type SessionView = SessionSnapshot & { counts?: Omit<Roster, 'rows'> }
 export type RosterView = Roster & { session: string; now: number; sessions?: SessionView[]; expanded?: string[]; settings?: PartySettings }
 export type RosterInput = { agents: AgentRecord[]; stats: Record<string, AgentStats>; main: MainFacts | null; now: number }

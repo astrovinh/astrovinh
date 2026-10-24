@@ -2,7 +2,7 @@ import type { AgentRow, AnimalKey } from '../types'
 import { elapsed } from './roster'
 
 export const ANIMAL_EMOJI: Record<AnimalKey, string> = {
-  ember: '\u{1F98A}', hop: '\u{1F430}', sage: '\u{1F989}', bruno: '\u{1F43B}', pan: '\u{1F43C}', pip: '\u{1F438}',
+  ember: '\u{1F98A}', ember2: '\u{1F98A}', hop: '\u{1F430}', sage: '\u{1F989}', bruno: '\u{1F43B}', pan: '\u{1F43C}', pip: '\u{1F438}',
   mochi: '\u{1F431}', mochi2: '\u{1F431}', biscuit: '\u{1F436}', biscuit2: '\u{1F436}', waddle: '\u{1F427}', waddle2: '\u{1F427}'
 }
 
@@ -37,7 +37,7 @@ export function terminalMeta(layout: TerminalRowLayout, row: AgentRow, now: numb
 
 /** Solid progress is measured, sweeping progress is activity, dotted progress is unknown. */
 export function barCells(row: AgentRow, cells: number, now: number): Cell[] {
-  if (cells <= 0) return []
+  if (cells <= 0 || (!row.todo && (row.state === 'idle' || row.state === 'pending'))) return []
   const color = COLORS[row.state]
   if (row.todo) {
     const { done, total } = row.todo

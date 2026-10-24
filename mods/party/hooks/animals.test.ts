@@ -6,8 +6,18 @@ const states: AgentState[] = ['idle', 'running', 'waiting', 'pending', 'complete
 const normalize = (s: string) => s.replace(/a\d+_/g, 'id_')
 
 test('the species retain every coat from the existing team avatar engine', () => {
-  expect(Object.fromEntries(Object.entries(SPECIES).map(([kind, sp]) => [kind, sp.coats.length]))).toEqual({ cat: 4, dog: 4, fox: 2, bear: 3, panda: 1, rabbit: 3, owl: 2, frog: 2, penguin: 1 })
+  expect(Object.fromEntries(Object.entries(SPECIES).map(([kind, sp]) => [kind, sp.coats.length]))).toEqual({ cat: 4, dog: 4, fox: 2, bear: 3, panda: 1, rabbit: 3, owl: 2, frog: 2, penguin: 2 })
   expect(SPECIES.rabbit!.coats[1]).toEqual(['#9a8f86', '#e6ded6', '#4f4740'])
+})
+
+test('second lead coats draw distinct art and the second fox uses the existing grey coat', () => {
+  expect(ANIMALS.ember2.kind).toBe('fox')
+  expect(ANIMALS.ember2.coat).toBe(1)
+  for (const [first, second] of [['ember', 'ember2'], ['mochi', 'mochi2'], ['biscuit', 'biscuit2'], ['waddle', 'waddle2']] as const) {
+    const base = animalSvg(first, 'idle', 'think', 3, { still: true }).source
+    const next = animalSvg(second, 'idle', 'think', 3, { still: true }).source
+    expect(normalize(base) === normalize(next)).toBe(false)
+  }
 })
 
 test('every approved species draws a bounded self-contained 36px SVG', () => {

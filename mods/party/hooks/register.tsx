@@ -104,7 +104,7 @@ async function otherSessions($: any, now: number): Promise<SessionView[]> {
       const entry = await $.store.get(key) as SessionSnapshot | undefined
       if (!entry || key !== `s:${entry.id}` || typeof entry.label !== 'string' || !Number.isFinite(entry.at) || !Array.isArray(entry.agents)) continue
       if (now - entry.at > 120000) await $.store.delete(key)
-      else others.push({ id: entry.id, label: entry.label, at: entry.at, agents: entry.agents.slice(0, 12) })
+      else others.push({ id: entry.id, label: entry.label, at: entry.at, startedAt: entry.startedAt ?? 0, agents: entry.agents.slice(0, 12) })
     } catch {
       // One disappearing key must not hide the remaining live sessions.
     }
@@ -148,7 +148,7 @@ const refresh = async ($: any, followPin = true) => {
     if (!active || cycle !== generation) return
     agents = rememberAgents(live, agents, now)
     const local = buildRows({ agents, stats, main, now })
-    own = { id: sessionId, label: session, at: now, agents: local.rows }
+    own = { id: sessionId, label: session, at: now, startedAt: main?.startedAt ?? 0, agents: local.rows }
     await publish($)
     const counts = { total: local.total, working: local.working, blocked: local.blocked, overflow: local.overflow }
     const sessions = mergeSessions({ ...own, counts }, await otherSessions($, now), now)

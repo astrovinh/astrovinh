@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import { bar, drawPanel, meterWidth, pictureCount } from './draw'
 import { buildRows } from './roster'
+import { mergeSessions } from './sessions'
 import type { AgentRow, SessionView } from '../types'
 import { ANIMAL_EMOJI, rowWidth, terminalRowLayout } from './terminal'
 
@@ -24,7 +25,12 @@ const rectangles = (source: string) => (source.match(/<rect\b[^>]*\/>|<rect\b[^>
 test('a row without a todo list never draws a partial fill', () => {
   const colors = { running: '#8cc9a1', waiting: '#d6ba7b', pending: '#7b776c', idle: '#7b776c', completed: '#94b7e8', failed: '#f2a3b2', killed: '#7b776c' }
   for (const state of Object.keys(colors) as AgentRow['state'][]) {
-    const props = renderBars([{ ...view.rows[0]!, state, todo: null }])[0]!
+    const bars = renderBars([{ ...view.rows[0]!, state, todo: null }])
+    if (state === 'idle' || state === 'pending') {
+      expect(bars).toHaveLength(0)
+      continue
+    }
+    const props = bars[0]!
     const [track, ...fills] = rectangles(props.source)
     expect(Number(track!.width)).toBe(100)
     for (const fill of fills) {
@@ -40,7 +46,7 @@ test('a row without a todo list never draws a partial fill', () => {
       expect(motion.attributeName).toBe('x')
       expect(motion.values!.split(';').map(Number)).toEqual([0, 66, 0])
       expect(motion.repeatCount).toBe('indefinite')
-    } else if (['waiting', 'pending', 'idle'].includes(state)) {
+    } else if (state === 'waiting') {
       expect(fills).toHaveLength(0)
       expect(props.source.match(/<path\b/g)).toHaveLength(8)
     } else {
@@ -65,7 +71,12 @@ test('a todo list fills exactly done over total', () => {
 test('still bars carry no animation', () => {
   for (const state of ['running', 'waiting', 'pending', 'idle', 'completed', 'failed', 'killed'] as const) {
     for (const todo of [null, { done: 1, total: 3 }]) {
-      const source = bar({ ...view.rows[0]!, state, todo }, true).source
+      const meter = bar({ ...view.rows[0]!, state, todo }, true)
+      if (!todo && (state === 'idle' || state === 'pending')) {
+        expect(meter).toBe(null)
+        continue
+      }
+      const source = meter!.source
       expect(source.includes('<animate')).toBe(false)
       const [, ...fills] = rectangles(source)
       if (state === 'running' && !todo) expect(fills).toHaveLength(0)
@@ -115,6 +126,66 @@ const renderDesktop = (rows = view.rows, columns?: number) => {
   drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg') }, 'desktop', { ...view, rows, total: rows.length }, columns)
   return nodes
 }
+
+test('idle and pending desktop rows keep their name and text without a bar node or its height', () => {
+  for (const state of ['idle', 'pending'] as const) {
+    const row = { ...view.rows[0]!, state, todo: null }
+    expect(bar(row)).toBe(null)
+    const nodes = renderDesktop([row])
+    const column = nodes.find(n => n.type === 'Box' && n.props.flexDirection === 'column' && n.props.flexGrow === 1)!
+    expect(children(column).map(n => n.type)).toEqual(['Box', 'Text'])
+    expect(nodeText(column)).toContain(row.name)
+    expect(nodeText(children(column)[1])).toBe(row.line)
+    expect(nodes.filter(n => n.type === 'Svg' && n.props.height === 3)).toHaveLength(0)
+  }
+})
+
+test('idle and pending rows with todos still draw measured desktop bars', () => {
+  for (const state of ['idle', 'pending'] as const) {
+    const bars = renderBars([{ ...view.rows[0]!, state, todo: { done: 1, total: 4 } }])
+    expect(bars).toHaveLength(1)
+    expect(Number(rectangles(bars[0]!.source)[1]!.width)).toBe(25)
+  }
+})
+
+test('folded miniatures and expanded desktop and terminal rows use the same reassigned session animals', () => {
+  const roster = buildRows({ agents: Array.from({ length: 2 }, (_, i) => ({ id: `scout-${i}`, type: 'Explore', status: 'idle' as const,
+    description: `Task ${i}`, firstSeen: NOW + i, endedAt: null })), stats: {}, main: { startedAt: NOW, endedAt: NOW, working: false }, now: NOW })
+  for (const ownStart of [1, 3]) {
+    const own = { id: 'own', label: 'Own', startedAt: ownStart, at: NOW, agents: roster.rows }
+    const other = { id: 'other', label: 'Other', startedAt: 2, at: NOW, agents: roster.rows }
+    const sessions = mergeSessions(own, [other], NOW)
+    const ownName = ownStart === 1 ? 'Ember' : 'Mochi'
+    const otherName = ownStart === 1 ? 'Mochi' : 'Ember'
+    const spareName = ownStart === 1 ? 'Biscuit' : 'Mochi'
+    for (const expanded of [false, true]) {
+      const nodes: Node[] = []
+      const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+      drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg'), Button: component('Button') }, 'desktop',
+        { ...view, ...roster, sessions, expanded: expanded ? ['other'] : [] })
+      const ownGroup = nodes.find(n => n.props.key === 'session:own')!
+      expect(nodeText(ownGroup)).toContain(ownName)
+      if (expanded) {
+        const otherGroup = nodes.find(n => n.props.key === 'session:other')!
+        expect(nodeText(otherGroup)).toContain(otherName)
+        expect(nodeText(otherGroup)).toContain(spareName)
+      } else {
+        const miniatures = nodes.filter(n => n.type === 'Svg' && n.props.width === 24)
+        expect(miniatures).toHaveLength(3)
+        expect(miniatures[0]!.props.alt).toContain(`${otherName} the ${ownStart === 1 ? 'cat' : 'fox'}`)
+        expect(miniatures[0]!.props.alt).toContain('Lead')
+        expect(miniatures[2]!.props.alt).toContain(spareName)
+      }
+      expect(nodes.filter(n => n.type === 'Svg' && n.props.width === 36)[0]!.props.alt).toContain(`${ownName} the ${ownStart === 1 ? 'fox' : 'cat'}`)
+    }
+    const { nodes } = renderTerminal(roster.rows, 64, sessions)
+    for (const s of sessions) {
+      const group = nodes.find(n => n.props.key === `session:${s.id}`)!
+      expect(nodeText(group)).toContain(s.agents[0]!.name)
+      expect(nodeText(group)).toContain(ANIMAL_EMOJI[s.agents[0]!.animal])
+    }
+  }
+})
 
 const multiPanel = (open = false, surface = 'desktop', own: SessionView = { id: 'own', label: 'astrovinh', at: NOW, agents: view.rows }, includeOther = true) => {
   const nodes: Node[] = []
@@ -514,6 +585,20 @@ const renderTerminal = (rows = view.rows, columns?: number, sessions?: SessionVi
   return { nodes, tree }
 }
 const terminalCells = (text: string) => [...text].reduce((n, c) => n + (c.codePointAt(0)! > 0xffff ? 2 : 1), 0)
+
+test('idle and pending terminal rows leave the tier bar column blank and keep both text lines', () => {
+  for (const state of ['idle', 'pending'] as const) for (const columns of [64, 44, 24]) {
+    const row = { ...view.rows[0]!, state, todo: null }
+    const { nodes } = renderTerminal([row], columns)
+    const parts = children(nodes.find(n => n.props.key === row.id)!)
+    expect(parts.map(n => n.type)).toEqual(['Box', 'Text'])
+    expect(nodeText(parts[0])).toContain(row.name)
+    expect(nodeText(parts[1])).toBe(`   ${row.line}`)
+    const meter = children(parts[0]!).find(n => n.props.key === 'bar')!
+    expect(meter.props.width).toBe(terminalRowLayout(columns).bar)
+    expect(nodeText(meter)).toBe('')
+  }
+})
 
 test('terminal agents have two truncating lines, emoji and separate nonshrinking columns instead of roles', () => {
   const row = { ...view.rows[0]!, name: 'A name longer than its column' }
