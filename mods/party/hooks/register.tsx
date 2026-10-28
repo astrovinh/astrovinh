@@ -118,7 +118,7 @@ async function otherSessions($: any, now: number): Promise<SessionView[]> {
       const entry = await $.store.get(key) as SessionSnapshot | undefined
       if (!entry || key !== `s:${entry.id}` || typeof entry.label !== 'string' || !Number.isFinite(entry.at) || !Array.isArray(entry.agents)) continue
       if (now - entry.at > 120000) await $.store.delete(key)
-      else others.push({ id: entry.id, label: entry.label, at: entry.at, startedAt: entry.startedAt ?? 0, agents: entry.agents.slice(0, 12) })
+      else others.push({ id: entry.id, label: entry.label, at: entry.at, startedAt: entry.startedAt ?? 0, agents: entry.agents.slice(0, 12), counts: entry.counts, quietSince: entry.quietSince })
     } catch {
       // One disappearing key must not hide the remaining live sessions.
     }
@@ -162,10 +162,11 @@ const refresh = async ($: any, followPin = true) => {
     if (!active || cycle !== generation) return
     agents = rememberAgents(live, agents, now)
     const local = buildRows({ agents, stats, main, now })
-    own = { id: sessionId, label: session, at: now, startedAt: main?.startedAt ?? 0, agents: local.rows }
+    const { rows: sharedRows, quietSince, ...sharedCounts } = buildRows({ agents, stats, main, now, ownSession: false })
+    own = { id: sessionId, label: session, at: now, startedAt: main?.startedAt ?? 0, agents: sharedRows, counts: sharedCounts, quietSince }
     await publish($)
-    const counts = { total: local.total, working: local.working, blocked: local.blocked, overflow: local.overflow }
-    const sessions = mergeSessions({ ...own, counts }, await otherSessions($, now), now)
+    const { rows, quietSince: localQuietSince, ...counts } = local
+    const sessions = mergeSessions({ ...own, agents: rows, counts, quietSince: localQuietSince }, await otherSessions($, now), now)
     if (!active || cycle !== generation) return
     await scanCodex($, cycle)
     if (!active || cycle !== generation) return
@@ -226,10 +227,10 @@ async function redrawLast($: any) {
   const enabled = (await read($, settings)).codex !== false
   const now = await $.clock.now()
   if (!current()) return
-  const codex = enabled ? codexRows(codexRuns, now, codexAck) : []
+  const { rows: codex, quiet: codexQuiet } = enabled ? codexRows(codexRuns, now, codexAck) : { rows: [], quiet: 0 }
   const ready = enabled ? Object.keys(codexAck.ready).length : 0
   const sessions = lastView.sessions ?? []
-  const view = { ...lastView, now, codex, ready }
+  const view = { ...lastView, now, codex, codexQuiet, ready }
   const status = statusLine(sessions, { working: codex.filter(row => row.state === 'running').length, ready })
   if (lastStatus !== (status ?? '')) {
     try {
@@ -249,7 +250,7 @@ async function redrawLast($: any) {
   if (!current()) return
   const nextSignature = JSON.stringify({ ...view, now: undefined,
     sweep: sessions.some(s => s.agents.some(r => r.state === 'running' && !r.todo)) || codex.some(r => r.state === 'running') ? Math.floor(now / 3000) : undefined,
-    sessions: sessions.map(s => ({ ...s, at: undefined, times: s.agents.map(r => elapsed((r.endedAt ?? now) - r.startedAt)) })) })
+    sessions: sessions.map(s => ({ ...s, at: undefined, quietElapsed: s.quietSince == null ? undefined : elapsed(now - s.quietSince), times: s.agents.map(r => elapsed((r.endedAt ?? now) - r.startedAt)) })) })
   if (signature !== nextSignature) {
     await update($, roster, previous => current() ? view : previous)
     if (current()) signature = nextSignature
@@ -326,8 +327,11 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     try {
       const id = e.agentId ?? 'main'
+      const cycle = generation
+      const lastAt = await $.clock.now()
+      if (cycle !== generation) return next(e)
       const previous = stats[id]
-      stats[id] = { tools: (previous?.tools ?? 0) + 1, tool: toolKind(e.tool), todos: e.tool === 'TodoWrite' ? cleanTodos(e.todos) : previous?.todos ?? [] }
+      stats[id] = { tools: (previous?.tools ?? 0) + 1, tool: toolKind(e.tool), todos: e.tool === 'TodoWrite' ? cleanTodos(e.todos) : previous?.todos ?? [], lastAt }
     } catch {}
     return next(e)
   })

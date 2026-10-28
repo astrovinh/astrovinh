@@ -44,12 +44,14 @@ export function bar(row: AgentRow, still = false) {
 }
 
 export function drawPanel(ui: any, surface: string, view: RosterView, columns?: number) {
-  const sessions = view.sessions ?? [{ id: '', label: view.session, at: view.now, agents: view.rows, counts: { total: view.total, working: view.working, blocked: view.blocked, overflow: view.overflow } }]
+  const sessions = view.sessions ?? [{ id: '', label: view.session, at: view.now, agents: view.rows, quietSince: view.quietSince, counts: { total: view.total, working: view.working, blocked: view.blocked, overflow: view.overflow, quiet: view.quiet ?? 0 } }]
   const codex = view.codex ?? []
+  const codexQuiet = view.codexQuiet ?? 0
   const ready = view.ready ?? 0
   const totals = sessionSummary(sessions)
   totals.total += codex.length
   totals.working += codex.filter(row => row.state === 'running').length
+  totals.quiet += codexQuiet
   const ids = new Set(sessions.flatMap(s => s.agents.map(row => `${s.id}:${row.id}`)))
   for (const row of codex) ids.add(`codex:${row.id}`)
   for (const id of pictures.keys()) if (!ids.has(id)) pictures.delete(id)
@@ -65,11 +67,12 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
   const terminalPadding = Math.min(2, Math.floor((terminalWidth ?? 4) / 2))
   const terminalProps = terminal ? { width: terminalWidth, minWidth: 0 } : {}
   const truncate = terminal ? { wrap: 'truncate' } : {}
-  const summaryText = `${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`
+  const summaryText = !totals.working && !totals.blocked && totals.quiet ? 'Nothing active' : `${totals.working} working`
   const attention = (totals.blocked ? ` \u00b7 ${totals.blocked} ${needsYou(totals.blocked)}` : '') + (ready ? ` \u00b7 ${ready} ready for review` : '')
+  const quietText = totals.quiet ? ` \u00b7 ${totals.quiet} quiet` : ''
   const sessionText = `${totals.sessions} ${totals.sessions === 1 ? 'session' : 'sessions'}`
-  const showSessions = columns === undefined || summaryText.length + attention.length + 2 + sessionText.length <= columns - 1
-  const summary = terminal ? null : <Text color={COLOR.second}>{`${totals.total} ${totals.total === 1 ? 'agent' : 'agents'}, ${totals.working} working`}{attention ? <Text color={COLOR.waiting}>{attention}</Text> : null}</Text>
+  const showSessions = columns === undefined || summaryText.length + attention.length + quietText.length + 2 + sessionText.length <= columns - 1
+  const summary = terminal ? null : <Text color={COLOR.second}>{summaryText}{attention ? <Text color={COLOR.waiting}>{attention}</Text> : null}{quietText}</Text>
   // Both local and expanded foreign sessions use this exact streamlined row renderer.
   const drawRows = (rows: AgentRow[], overflow: number, sessionId: string) => (
     <Box key={`session:${sessionId}`} flexDirection="column">
@@ -139,24 +142,23 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
   )
   return (
     <Box flexDirection="column" {...terminalProps}>
-      {terminal ? <Box {...terminalProps}><Text color={COLOR.second} wrap="truncate">{summaryText}{attention ? <Text color={COLOR.waiting} wrap="truncate">{attention}</Text> : null}{showSessions ? <Text color={COLOR.quiet} wrap="truncate">{`  ${sessionText}`}</Text> : null}</Text></Box> : (
+      {terminal ? <Box {...terminalProps}><Text color={COLOR.second} wrap="truncate">{summaryText}{attention ? <Text color={COLOR.waiting} wrap="truncate">{attention}</Text> : null}{quietText}{showSessions ? <Text color={COLOR.quiet} wrap="truncate">{`  ${sessionText}`}</Text> : null}</Text></Box> : (
         <Box flexDirection="column" paddingX={2} paddingY={1}>
           <Box justifyContent="space-between">{summary}<Text color={COLOR.quiet}>{`${totals.sessions} ${totals.sessions === 1 ? 'session' : 'sessions'}`}</Text></Box>
         </Box>
       )}
-      {!totals.total ? <Box paddingX={terminal ? terminalPadding : 2} paddingY={1} {...terminalProps}><Text dimColor {...truncate}>No agents yet. They show up here when Claude Code starts one.</Text></Box> : null}
+      {!totals.total && !totals.quiet ? <Box paddingX={terminal ? terminalPadding : 2} paddingY={1} {...terminalProps}><Text dimColor {...truncate}>No agents yet. They show up here when Claude Code starts one.</Text></Box> : null}
       {sessions.map((s, index) => {
         const counts = sessionSummary([s])
         const open = index === 0 || view.expanded?.includes(s.id)
-        const agentCount = `${counts.total} ${counts.total === 1 ? 'agent' : 'agents'}`
-        const label = `${s.label || 'This session'} \u00b7 ${agentCount}`
+        const activity = counts.working ? `${counts.working} working` : 'quiet'
+        const label = `${s.label || 'This session'} \u00b7 ${activity}`
         return (
           <Box key={`group:${s.id}`} flexDirection="column">
             {index === 0 ? sessions.length > 1 ? (
-              surface !== 'desktop' ? <Box paddingX={terminalPadding} {...terminalProps}><Text color={COLOR.quiet} wrap="truncate">{`This session  ${agentCount}`}</Text></Box> : (
+              surface !== 'desktop' ? <Box paddingX={terminalPadding} {...terminalProps}><Text color={COLOR.quiet} wrap="truncate">{`This session \u00b7 ${activity}`}</Text></Box> : (
                 <Box paddingX={2} paddingY={1} gap={1} alignItems="center" justifyContent="space-between">
-                  <Text color={COLOR.quiet}>This session</Text>
-                  <Text color={COLOR.quiet}>{agentCount}</Text>
+                  <Text color={COLOR.quiet}>{`This session \u00b7 ${activity}`}</Text>
                 </Box>
               )
             ) : null : surface !== 'desktop' ? <Box paddingX={terminalPadding} {...terminalProps}><Text color={COLOR.second} wrap="truncate">{label}</Text></Box> : (
@@ -174,14 +176,16 @@ export function drawPanel(ui: any, surface: string, view: RosterView, columns?: 
               </Box>
             )}
             {surface !== 'desktop' || open ? drawRows(s.agents, s.counts?.overflow ?? 0, s.id) : null}
+            {counts.quiet > 0 ? <Box paddingX={terminal ? terminalPadding : 2} {...terminalProps}><Text color={COLOR.quiet} dimColor {...truncate}>{`${counts.quiet} quiet${s.quietSince == null ? '' : ` \u00b7 last active ${elapsed(view.now - s.quietSince)} ago`}`}</Text></Box> : null}
           </Box>
         )
       })}
-      {codex.length ? <Box flexDirection="column" {...terminalProps}>
+      {codex.length || codexQuiet ? <Box flexDirection="column" {...terminalProps}>
         <Box paddingX={terminal ? terminalPadding : 2} paddingY={terminal ? 0 : 1} {...terminalProps}>
           <Text color={COLOR.quiet} {...truncate}>{`Codex \u00b7 ${codex.filter(r => !r.depth).length} ${codex.filter(r => !r.depth).length === 1 ? 'run' : 'runs'}`}</Text>
         </Box>
         {drawRows(codex, 0, 'codex')}
+        {codexQuiet ? <Box paddingX={terminal ? terminalPadding : 2} {...terminalProps}><Text color={COLOR.quiet} dimColor {...truncate}>{`+${codexQuiet} quiet`}</Text></Box> : null}
       </Box> : null}
     </Box>
   )

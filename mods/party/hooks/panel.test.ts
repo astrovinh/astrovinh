@@ -95,7 +95,7 @@ test('desktop rows draw interactive 36px animals and an amber blocked tint and s
   expect(nodes.some(n => n.props.backgroundColor === '#2a2822')).toBe(true)
   expect(nodes.some(n => n.type === 'Text' && n.props.color === '#d6ba7b' && textContent(n.props).startsWith('Blocked'))).toBe(true)
   const text = nodes.filter(n => n.type === 'Text').map(n => n.props.children).join(' ')
-  for (const line of ['1 session', '1 agent', '0 working', '1 needs you', 'Blocked', 'Reading code', '48s', '1/2']) expect(text).toContain(line)
+  for (const line of ['1 session', '0 working', '1 needs you', 'Blocked', 'Reading code', '48s', '1/2']) expect(text).toContain(line)
   expect(nodes.some(n => n.type === 'Svg' && n.props.source.includes('width="50"'))).toBe(true)
 })
 
@@ -198,26 +198,26 @@ const multiPanel = (open = false, surface = 'desktop', own: SessionView = { id: 
 test('multi-session summary counts folded rows without an uppercase band or duplicate title', () => {
   const nodes = multiPanel()
   const text = nodes.filter(n => n.type === 'Text').map(nodeText)
-  expect(text).toContain('3 agents, 1 working \u00b7 2 need you')
+  expect(text).toContain('1 working \u00b7 2 need you')
   expect(text).toContain('2 sessions')
   expect(text.some(t => ['Party', 'THIS SESSION', 'astrovinh'].includes(t))).toBe(false)
   const button = nodes.find(n => n.type === 'Button')!
   expect(button.props.key).toBe('expand:other')
-  expect(button.props.label).toBe('Debug26 \u00b7 2 agents')
+  expect(button.props.label).toBe('Debug26 \u00b7 1 working')
   expect(button.props.plain).toBe(true)
   expect(nodes.filter(n => n.type === 'Svg' && n.props.width === 24)).toHaveLength(2)
   expect(nodes.some(n => n.type === 'Text' && nodeText(n) === 'needs you' && n.props.color === '#d6ba7b')).toBe(true)
   expect(text.includes('Foreign work')).toBe(false)
 })
 
-test('desktop labels this session before its rows with a quiet left label and right agent count', () => {
+test('desktop labels this session before its rows with working activity or quiet', () => {
   for (const total of [0, 1, 2, 15]) {
     const rows = Array.from({ length: Math.min(total, 2) }, (_, i) => ({ ...view.rows[0]!, id: `own-${i}` }))
     const nodes = multiPanel(false, 'desktop', { id: 'own', label: 'astrovinh', at: NOW, agents: rows, counts: { total, working: 0, blocked: 0, overflow: Math.max(0, total - rows.length) } })
     const group = nodes.find(n => n.props.key === 'group:own')!
     const [header, rowGroup] = children(group)
     expect(header!.type).toBe('Box')
-    expect(children(header!).map(nodeText)).toEqual(['This session', `${total} ${total === 1 ? 'agent' : 'agents'}`])
+    expect(children(header!).map(nodeText)).toEqual(['This session \u00b7 quiet'])
     expect(header!.props.justifyContent).toBe('space-between')
     expect(header!.props.paddingX).toBe(2)
     expect(rowGroup!.props.key).toBe('session:own')
@@ -249,14 +249,14 @@ test('one session has no local header on desktop or terminal with explicit or fa
   }
 })
 
-test('terminal labels this session with its agent count in one plain line before its rows', () => {
+test('terminal labels this session with its activity in one plain line before its rows', () => {
   for (const total of [0, 1, 2]) {
     const rows = Array.from({ length: total }, (_, i) => ({ ...view.rows[0]!, id: `own-${i}` }))
     const nodes = multiPanel(false, 'terminal', { id: 'own', label: 'astrovinh', at: NOW, agents: rows })
     const group = nodes.find(n => n.props.key === 'group:own')!
     const [header, rowGroup] = children(group)
     expect(children(header!).map(n => n.type)).toEqual(['Text'])
-    expect(nodeText(header)).toBe(`This session  ${total} ${total === 1 ? 'agent' : 'agents'}`)
+    expect(nodeText(header)).toBe('This session \u00b7 quiet')
     expect(rowGroup!.props.key).toBe('session:own')
     expect(nodes.some(n => n.type === 'Svg' || n.type === 'Button')).toBe(false)
   }
@@ -280,7 +280,7 @@ test('terminal groups every session even when desktop folding is closed and draw
   const nodes = multiPanel(false, 'terminal')
   expect(nodes.some(n => n.type === 'Svg')).toBe(false)
   const text = nodes.filter(n => n.type === 'Text').map(nodeText).join(' ')
-  expect(text).toContain('This session  1 agent')
+  expect(text).toContain('This session \u00b7 quiet')
   expect(text).toContain('Debug26')
   expect(text).toContain('Foreign work')
   expect(text.indexOf('This session') < text.indexOf('Debug26')).toBe(true)
@@ -296,11 +296,11 @@ test('picture cache keeps separate entries for matching agent ids in different s
 test('desktop header puts the summary beside the session chip without repeating the pane title', () => {
   const nodes = renderDesktop()
   expect(nodes.filter(n => n.type === 'Text').some(n => nodeText(n) === 'Party')).toBe(false)
-  const summary = nodes.find(n => n.type === 'Text' && nodeText(n) === '1 agent, 0 working \u00b7 1 needs you')!
+  const summary = nodes.find(n => n.type === 'Text' && nodeText(n) === '0 working \u00b7 1 needs you')!
   expect(summary).toBeDefined()
   const header = nodes.find(n => n.type === 'Box' && children(n).includes(summary))!
   expect(header.props.justifyContent).toBe('space-between')
-  expect(children(header).map(nodeText)).toEqual(['1 agent, 0 working \u00b7 1 needs you', '1 session'])
+  expect(children(header).map(nodeText)).toEqual(['0 working \u00b7 1 needs you', '1 session'])
   expect(children(summary)[0]!.props.color).toBe('#d6ba7b')
 })
 
@@ -465,7 +465,7 @@ test('desktop and terminal panels disclose hidden agents in a dim final row', ()
     const component = (type: string) => (props: any) => { nodes.push({ type, props }); return props.children ?? null }
     drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg') }, surface, { ...view, ...roster })
     const texts = nodes.filter(n => n.type === 'Text')
-    expect(texts.some(n => textContent(n.props).includes('15 agents, 14 working'))).toBe(true)
+    expect(texts.some(n => textContent(n.props).includes('14 working'))).toBe(true)
     expect(texts.some(n => textContent(n.props).includes('1 needs you'))).toBe(true)
     expect(textContent(texts[texts.length - 1]!.props)).toBe('+3 more agents')
     expect(texts[texts.length - 1]!.props.dimColor).toBe(true)
@@ -686,9 +686,9 @@ test('terminal header is one truncating summary and only includes sessions when 
     const { nodes, tree } = renderTerminal(rows, columns)
     const header = children(tree)[0]!
     expect(children(header).map(n => n.type)).toEqual(['Text'])
-    expect(nodeText(header)).toContain('2 agents, 1 working')
+    expect(nodeText(header)).toContain('1 working')
     expect(nodeText(header).includes('Party')).toBe(false)
-    expect(nodeText(header).includes('1 session')).toBe(columns >= 64)
+    expect(nodeText(header).includes('1 session')).toBe(columns >= 44)
     expect(children(header)[0]!.props.wrap).toBe('truncate')
     expect(nodes.some(n => n.type === 'Text' && n.props.color === '#d6ba7b' && nodeText(n).includes('1 needs you'))).toBe(true)
   }
@@ -736,7 +736,7 @@ const renderCodex = (surface: string, columns?: number) => {
 test('desktop Codex has a quiet section header, badge, helper indentation and inclusive totals', () => {
   const { nodes } = renderCodex('desktop')
   const texts = nodes.filter(n => n.type === 'Text').map(nodeText)
-  expect(texts.some(t => t.includes('3 agents, 1 working'))).toBe(true)
+  expect(texts.some(t => t.includes('1 working'))).toBe(true)
   expect(texts.some(t => t.includes('1 ready for review'))).toBe(true)
   expect(texts).toContain('Codex \u00b7 1 run')
   expect(nodes.filter(n => n.type === 'Button')).toHaveLength(0)
@@ -786,5 +786,58 @@ test('Codex retains the approved terminal tiers when badge and indentation fit',
     expect(pieces.some(p => p.props.key === 'bar')).toBe(true)
     if (columns >= 44) expect(nodeText(first)).toContain('Done')
     if (columns >= 64) expect(nodeText(first)).toContain('9 cmds')
+  }
+})
+
+test('desktop and terminal show active counts and quiet lines without drawing quiet rows', () => {
+  const roster = buildRows({ agents: [
+    { id: 'old', type: 'Explore', status: 'running', description: 'Hidden quiet task', firstSeen: NOW - 72300000, endedAt: null },
+    { id: 'new', type: 'Explore', status: 'running', description: 'Visible task', firstSeen: NOW, endedAt: null }
+  ], stats: {}, main: null, now: NOW })
+  for (const surface of ['desktop', 'terminal']) {
+    const nodes: Node[] = []
+    const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+    drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg') }, surface, { ...roster, now: NOW, session: 'repo' }, 200)
+    const text = nodes.filter(n => n.type === 'Text').map(nodeText).join(' ')
+    expect(text).toContain('1 working')
+    expect(text).toContain('1 quiet')
+    expect(text).toContain('1 quiet \u00b7 last active 20h 5m ago')
+    expect(text.includes('Hidden quiet task')).toBe(false)
+    expect(text.includes('2 working')).toBe(false)
+    expect(text.includes('agents,')).toBe(false)
+  }
+})
+
+test('quiet-only sessions say Nothing active and Codex counts only visible runs', () => {
+  const roster = buildRows({ agents: [{ id: 'old', type: 'Explore', status: 'running', description: 'Hidden', firstSeen: NOW - 660000, endedAt: null }], stats: {}, main: null, now: NOW })
+  for (const surface of ['desktop', 'terminal']) {
+    const nodes: Node[] = []
+    const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+    drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg') }, surface,
+      { ...roster, now: NOW, session: 'repo', codex: [], codexQuiet: 2 } as any, 200)
+    const text = nodes.filter(n => n.type === 'Text').map(nodeText).join(' ')
+    expect(text).toContain('Nothing active \u00b7 3 quiet')
+    expect(text).toContain('Codex \u00b7 0 runs')
+    expect(text).toContain('+2 quiet')
+    expect(text.includes('No agents yet')).toBe(false)
+  }
+})
+
+test('terminal activity header and quiet line stay bounded and truncated at widths one through two hundred', () => {
+  const roster = buildRows({ agents: [{ id: 'old', type: 'Explore', status: 'running', description: 'Hidden', firstSeen: NOW - 660000, endedAt: null }], stats: {}, main: null, now: NOW })
+  for (let columns = 1; columns <= 200; columns++) {
+    const nodes: Node[] = []
+    const component = (type: string) => (props: any) => { const node = { type, props }; nodes.push(node); return node }
+    const tree = drawPanel({ Box: component('Box'), Text: component('Text'), Svg: component('Svg') }, 'terminal',
+      { ...roster, now: NOW, session: 'repo' }, columns) as any
+    expect(tree.props.width).toBe(columns - 1)
+    const lines = nodes.filter(n => n.type === 'Text' && /Nothing active|last active/.test(nodeText(n)))
+    expect(lines).toHaveLength(2)
+    for (const line of lines) expect(line.props.wrap).toBe('truncate')
+    const boxes = nodes.filter(n => n.type === 'Box' && children(n).some(c => lines.includes(c)))
+    for (const box of boxes) {
+      expect(box.props.width <= columns - 1).toBe(true)
+      expect(2 * (box.props.paddingX ?? 0) <= columns - 1).toBe(true)
+    }
   }
 })

@@ -158,7 +158,7 @@ test('an agent returning to running clears its previous end time', () => {
     const running = rememberAgents([agent('a')], completed, NOW + 3600000)
     expect(running[0]!.endedAt).toBe(null)
     expect(running[0]!.firstSeen).toBe(NOW)
-    const row = rows(running, {}, NOW + 3600000).rows[0]!
+    const row = rows(running, { a: { tools: 1, tool: 'read', todos: [], lastAt: NOW + 3600000 } }, NOW + 3600000).rows[0]!
     expect(row.state).toBe('running')
     expect(row.endedAt).toBe(null)
   }
@@ -220,13 +220,13 @@ test('main line is Ready when idle and Working when running without a todo or to
   }
 })
 
-test('main line prefers its todo activeForm then its last tool phrase', () => {
+test('main line prefers its active todo, then current work or Ready', () => {
   const stats: AgentStats = { tool: 'run', tools: 5, todos: [{ status: 'in_progress', activeForm: 'Checking tests' }] }
   for (const working of [false, true]) {
     const mainFacts = { ...main, working }
     expect(buildRows({ agents: [], stats: { main: stats }, main: mainFacts, now: NOW }).rows[0]!.line).toBe('Checking tests')
     for (const todos of [[], [{ status: 'in_progress' as const, activeForm: ' \t ' }]]) {
-      expect(buildRows({ agents: [], stats: { main: { ...stats, todos } }, main: mainFacts, now: NOW }).rows[0]!.line).toBe('Running a command')
+      expect(buildRows({ agents: [], stats: { main: { ...stats, todos } }, main: mainFacts, now: NOW }).rows[0]!.line).toBe(working ? 'Running a command' : 'Ready')
     }
   }
 })
@@ -256,4 +256,52 @@ test('typed teammates also disclose unavailable activity using their teammate id
   const row = rows([a]).rows[0]!
   expect(row.slot).toBe('builder')
   expect(row.note).toBe('Reported running, activity unavailable')
+})
+
+test('running agents fold at the exact ten-minute boundary and return on activity', () => {
+  for (const age of [9 * 60000, 10 * 60000, 11 * 60000]) {
+    const result = rows([agent('a')], { a: { tools: 1, tool: 'read', todos: [], lastAt: NOW - age } as AgentStats }) as any
+    expect(result.quiet).toBe(age >= 600000 ? 1 : 0)
+    expect(result.working).toBe(age >= 600000 ? 0 : 1)
+    expect(result.rows.map((r: any) => r.state)).toEqual(age >= 600000 ? [] : ['running'])
+    expect(result.quietSince).toBe(age >= 600000 ? NOW - age : null)
+  }
+})
+
+test('waiting never folds and missing activity uses firstSeen without changing finished expiry', () => {
+  const old = NOW - 5 * 3600000
+  const result = rows([agent('wait', 'waiting', old), agent('quiet', 'running', old),
+    { ...agent('done', 'completed', old), endedAt: NOW - 299999 }], {
+      wait: { tools: 1, tool: 'read', todos: [], lastAt: old } as AgentStats
+    }) as any
+  expect(result.rows.map((r: any) => r.id)).toEqual(['wait', 'done'])
+  expect([result.quiet, result.blocked, result.working, result.quietSince]).toEqual([1, 1, 0, old])
+  expect(rows([agent('new', 'running', NOW - 599999)]).rows).toHaveLength(1)
+})
+
+test('quietSince is the newest quiet activity and folding happens before the twelve-row cap', () => {
+  const agents = Array.from({ length: 25 }, (_, i) => agent(String(i), 'running', NOW - 700000 + i))
+  const stats = Object.fromEntries(agents.slice(12).map(a => [a.id, { tools: 1, tool: 'read' as const, todos: [], lastAt: NOW }]))
+  const result = rows(agents, stats) as any
+  expect(result.rows.map((r: any) => r.id)).toEqual(Array.from({ length: 12 }, (_, i) => String(i + 12)))
+  expect([result.quiet, result.quietSince, result.working, result.total, result.overflow]).toEqual([12, NOW - 700000 + 11, 13, 13, 1])
+})
+
+test('own idle main stays Ready while a foreign quiet main folds and recent mains stay visible', () => {
+  const input = { agents: [], stats: { main: { tools: 1, tool: 'run' as const, todos: [], lastAt: NOW - 660000 } },
+    main: { startedAt: NOW - 3600000, endedAt: NOW - 660000, working: false }, now: NOW }
+  const own = buildRows(input)
+  expect(own.rows.map(r => [r.id, r.line])).toEqual([['main', 'Ready']])
+  const foreign = buildRows({ ...input, ownSession: false } as any) as any
+  expect(foreign.rows).toHaveLength(0)
+  expect(foreign.quiet).toBe(1)
+  for (const main of [{ ...input.main, working: true }, { ...input.main, endedAt: NOW - 299999 }]) {
+    expect(buildRows({ ...input, main, ownSession: false } as any).rows).toHaveLength(1)
+  }
+  expect(buildRows({ ...input, stats: { main: { ...input.stats.main, lastAt: NOW - 540000 } }, ownSession: false } as any).rows).toHaveLength(1)
+})
+
+test('idle agents with no active todo never describe their previous tool as current work', () => {
+  expect(rows([agent('a', 'idle')], { a: { tools: 1, tool: 'run', todos: [] } }).rows[0]!.line).toBe('Task a')
+  expect(rows([{ ...agent('a', 'idle'), description: '' }], { a: { tools: 1, tool: 'run', todos: [] } }).rows[0]!.line).toBe('Idle')
 })

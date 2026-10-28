@@ -7,6 +7,7 @@ const SLOT: Record<Slot, AnimalKey> = { lead: 'ember', scout: 'hop', planner: 's
 const SPARES: AnimalKey[] = ['mochi', 'biscuit', 'waddle', 'mochi2', 'biscuit2', 'waddle2']
 const ROLE: Record<Slot, string> = { lead: 'Lead', scout: 'Scout', planner: 'Planner', builder: 'Builder', reviewer: 'Reviewer', helper: 'Little helper' }
 export const finished = (state: string) => ['completed', 'failed', 'killed'].includes(state)
+export const QUIET_MS = 10 * 60 * 1000
 
 export function slotOf(type: string, isMain: boolean): Slot {
   if (isMain) return 'lead'
@@ -76,20 +77,36 @@ export function buildRows(input: RosterInput): Roster {
   const ordered = [...agents].sort((a, b) => a.firstSeen - b.firstSeen)
   const assigned = assignAnimals(ordered.map(a => ({ ...a, slot: slotOf(a.type, false) })))
   const rows: AgentRow[] = []
+  let quiet = 0
+  let quietSince: number | null = null
+  const fold = (lastActive: number) => {
+    quiet += 1
+    quietSince = Math.max(quietSince ?? lastActive, lastActive)
+  }
   if (main) {
     const st = stats.main
-    rows.push({ id: 'main', main: true, slot: 'lead', animal: 'ember', name: 'Ember', role: 'Lead', state: main.working ? 'running' : 'idle',
-      line: todoLine(st?.todos) || (st ? phrase(st.tool) : main.working ? 'Working' : 'Ready'), tool: st?.tool ?? 'think', tools: st?.tools ?? 0,
-      startedAt: main.startedAt, endedAt: main.endedAt, todo: todoProgress(st?.todos) })
+    const lastActive = st?.lastAt ?? main.startedAt
+    const recentEnd = main.endedAt !== null && now - main.endedAt < 300000
+    if (input.ownSession === false && !main.working && !recentEnd && now - lastActive >= QUIET_MS) fold(lastActive)
+    else {
+      rows.push({ id: 'main', main: true, slot: 'lead', animal: 'ember', name: 'Ember', role: 'Lead', state: main.working ? 'running' : 'idle',
+        line: todoLine(st?.todos) || (main.working ? st ? phrase(st.tool) : 'Working' : 'Ready'), tool: st?.tool ?? 'think', tools: st?.tools ?? 0,
+        startedAt: main.startedAt, endedAt: main.endedAt, todo: todoProgress(st?.todos) })
+    }
   }
   for (const a of assigned) {
     if (a.endedAt !== null && now - a.endedAt >= 300000) continue
     const st = stats[a.id]
+    const lastActive = st?.lastAt ?? a.firstSeen
+    if (a.status !== 'waiting' && !finished(a.status) && now - lastActive >= QUIET_MS) {
+      fold(lastActive)
+      continue
+    }
     rows.push({ id: a.id, main: false, slot: a.slot, animal: a.animal, animalIndex: a.animalIndex, name: a.name, role: ROLE[a.slot], state: a.status,
-      line: todoLine(st?.todos) || a.description.trim() || (st ? phrase(st.tool) : STATE_LABEL[a.status]),
+      line: todoLine(st?.todos) || a.description.trim() || (st && a.status !== 'idle' ? phrase(st.tool) : STATE_LABEL[a.status]),
       tool: st?.tool ?? 'think', tools: st?.tools ?? 0, startedAt: a.firstSeen, endedAt: a.endedAt, todo: todoProgress(st?.todos),
       ...((a.teammateId || a.type === 'teammate') && !st ? { note: `Reported ${a.status}, activity unavailable` } : {}) })
   }
   const visible = rows.slice(0, 12)
-  return { rows: visible, total: rows.length, working: rows.filter(r => r.state === 'running').length, blocked: rows.filter(r => r.state === 'waiting').length, overflow: rows.length - visible.length }
+  return { rows: visible, total: rows.length, working: rows.filter(r => r.state === 'running').length, blocked: rows.filter(r => r.state === 'waiting').length, overflow: rows.length - visible.length, quiet, quietSince }
 }

@@ -1,5 +1,5 @@
 import type { AgentRow, CodexAck, CodexRun, Slot } from '../types'
-import { assignAnimals, elapsed } from './roster'
+import { assignAnimals, elapsed, QUIET_MS } from './roster'
 
 export function pythonResolveArgv(): string[] {
   return ['sh', '-c', `python=$(command -v python3 2>/dev/null) || python=
@@ -53,11 +53,13 @@ export function acknowledgeCodex(_ack: CodexAck, now: number): CodexAck {
   return { through: now, ready: {} }
 }
 
-export function codexRows(runs: CodexRun[], now: number, _ack: CodexAck): AgentRow[] {
+export function codexRows(runs: CodexRun[], now: number, _ack: CodexAck): { rows: AgentRow[]; quiet: number } {
   const ordered = [...runs].sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
   const assigned = assignAnimals(ordered.map(run => ({ ...run, slot: (run.kind === 'run' ? 'builder' : /review|sentinel/i.test(run.role ?? '') ? 'reviewer' : 'helper') as Slot })))
   const visible = assigned.filter(run => !run.done || now - run.lastAt < 300000)
-  const roots = visible.filter(run => run.kind === 'run').slice(-8)
+  const isQuiet = (run: CodexRun) => !run.done && now - run.lastAt >= QUIET_MS
+  const quiet = visible.filter(run => run.kind === 'run' && isQuiet(run)).length
+  const roots = visible.filter(run => run.kind === 'run' && !isQuiet(run)).slice(-8)
   const rows: AgentRow[] = []
   const seen = new Set<string>()
   const visit = (run: typeof assigned[number], depth: number) => {
@@ -74,5 +76,5 @@ export function codexRows(runs: CodexRun[], now: number, _ack: CodexAck): AgentR
     for (const helper of visible) if (helper.kind === 'helper' && helper.parentId === run.id) visit(helper, depth + 1)
   }
   for (const root of roots) visit(root, 0)
-  return rows
+  return { rows, quiet }
 }

@@ -20,6 +20,8 @@ When an agent writes a to-do list, the thin bar shows how many steps are done. F
 
 Agents keep their animals and their place in the list as their status changes. Finished agents stay for five minutes. Party shows up to 12 rows per session, with a count when there are more.
 
+Quiet means no activity for 10 minutes. Party folds these agents into one quiet line in their session; they come back by themselves when the agent does something. Waiting agents stay visible, and your current session's main agent always stays visible.
+
 ## Codex runs
 
 Local Codex runs appear in their own section with a `>_` badge. Bruno is the first builder, Pan is the first reviewer, and Pip is the first helper. Helpers nest below their run. Other runs of the same job use spare animals.

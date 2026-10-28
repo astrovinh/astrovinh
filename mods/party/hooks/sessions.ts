@@ -42,8 +42,8 @@ export function summary(sessions: SessionView[]) {
       working: session.agents.filter(row => row.state === 'running').length,
       blocked: session.agents.filter(row => row.state === 'waiting').length
     }
-    return { total: sum.total + counts.total, working: sum.working + counts.working, blocked: sum.blocked + counts.blocked, sessions: sum.sessions + 1 }
-  }, { total: 0, working: 0, blocked: 0, sessions: 0 })
+    return { total: sum.total + counts.total, working: sum.working + counts.working, blocked: sum.blocked + counts.blocked, quiet: sum.quiet + (session.counts?.quiet ?? 0), sessions: sum.sessions + 1 }
+  }, { total: 0, working: 0, blocked: 0, quiet: 0, sessions: 0 })
 }
 
 export function needsYou(count: number): string {

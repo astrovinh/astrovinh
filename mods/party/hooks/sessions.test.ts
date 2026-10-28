@@ -35,8 +35,8 @@ test('foreign ids are unique and their newest heartbeat wins', () => {
 test('summary counts agents and statuses across folded sessions and preserves local overflow counts', () => {
   const own = { ...session('own'), counts: { total: 16, working: 14, blocked: 1, overflow: 4 } }
   const other = { ...session('other'), agents: [{ ...agents[0]!, state: 'waiting' as const }, { ...agents[0]!, id: 'idle', state: 'idle' as const }] }
-  expect(summary([own, other])).toEqual({ total: 18, working: 14, blocked: 2, sessions: 2 })
-  expect(summary([])).toEqual({ total: 0, working: 0, blocked: 0, sessions: 0 })
+  expect(summary([own, other])).toEqual({ total: 18, working: 14, blocked: 2, quiet: 0, sessions: 2 })
+  expect(summary([])).toEqual({ total: 0, working: 0, blocked: 0, quiet: 0, sessions: 0 })
 })
 
 test('status text uses only ASCII counts and clears for an idle or empty party', () => {
@@ -151,4 +151,11 @@ test('stale sessions do not reserve lead ranks and reassignment leaves counts an
   expect(summary(result)).toEqual(summary([own, live]))
   expect(statusLine(result)).toBe(statusLine([own, live]))
   expect(result[0]!.counts).toEqual(own.counts)
+})
+
+test('summary accepts old snapshots without quiet and adds new quiet counts', () => {
+  const old = { ...session('old'), counts: { total: 1, working: 1, blocked: 0, overflow: 0 } }
+  const quiet = { ...session('quiet'), agents: [], counts: { total: 0, working: 0, blocked: 0, overflow: 0, quiet: 3 } }
+  expect((summary([old, quiet]) as any).quiet).toBe(3)
+  expect((summary([old]) as any).quiet).toBe(0)
 })

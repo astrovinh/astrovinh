@@ -6,7 +6,7 @@ export type PartySize = 'tiny' | 'small' | 'medium'
 export type PartySettings = { motion: boolean; size: PartySize; codex?: boolean }
 export type Todo = { status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 export type Progress = { done: number; total: number }
-export type AgentStats = { tools: number; tool: ToolKind; todos: Todo[] }
+export type AgentStats = { tools: number; tool: ToolKind; todos: Todo[]; lastAt?: number }
 export type AgentRecord = {
   id: string; type: string; description: string; status: AgentState
   parentId?: string; name?: string; teammateId?: string
@@ -33,11 +33,11 @@ export type AgentRow = {
   depth?: number
   meta?: string
 }
-export type Roster = { rows: AgentRow[]; working: number; blocked: number; total: number; overflow: number }
-export type SessionSnapshot = { id: string; label: string; at: number; startedAt?: number; agents: AgentRow[] }
-export type SessionView = SessionSnapshot & { counts?: Omit<Roster, 'rows'> }
-export type RosterView = Roster & { session: string; now: number; sessions?: SessionView[]; expanded?: string[]; settings?: PartySettings; codex?: AgentRow[]; ready?: number }
-export type RosterInput = { agents: AgentRecord[]; stats: Record<string, AgentStats>; main: MainFacts | null; now: number }
+export type Roster = { rows: AgentRow[]; working: number; blocked: number; total: number; overflow: number; quiet: number; quietSince: number | null }
+export type SessionSnapshot = { id: string; label: string; at: number; startedAt?: number; agents: AgentRow[]; quietSince?: number | null; counts?: Omit<Roster, 'rows' | 'quiet' | 'quietSince'> & { quiet?: number } }
+export type SessionView = SessionSnapshot
+export type RosterView = Omit<Roster, 'quiet' | 'quietSince'> & { quiet?: number; quietSince?: number | null; session: string; now: number; sessions?: SessionView[]; expanded?: string[]; settings?: PartySettings; codex?: AgentRow[]; codexQuiet?: number; ready?: number }
+export type RosterInput = { agents: AgentRecord[]; stats: Record<string, AgentStats>; main: MainFacts | null; now: number; ownSession?: boolean }
 
 declare module 'claude-code' {
   interface PluginState {

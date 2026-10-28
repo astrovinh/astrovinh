@@ -272,7 +272,7 @@ test('publishes one compact session key only on roster change or the ten-second 
   const p = setup(on)
   await $.session.start(start)
   expect(p.published.filter(w => w.key.startsWith('s:'))).toHaveLength(1)
-  expect(Object.keys(p.store['s:s1']).sort()).toEqual(['agents', 'at', 'id', 'label', 'startedAt'])
+  expect(Object.keys(p.store['s:s1']).sort()).toEqual(['agents', 'at', 'counts', 'id', 'label', 'quietSince', 'startedAt'])
   expect(p.store['s:s1'].id).toBe('s1')
   expect(p.store['s:s1'].label).toBe('party-test')
   expect(p.store['s:s1'].startedAt).toBe(NOW)
@@ -299,7 +299,7 @@ test('viewer retains foreign session starts and assigns its own lead without cha
     ['z-older', NOW - 1, 'ember'], ['s1', NOW, 'mochi'], ['a-newer', NOW + 1, 'biscuit']
   ])
   expect(p.store['s:s1'].agents[0].animal).toBe('ember')
-  expect(sessions[0]!.counts).toEqual({ total: 2, working: 1, blocked: 0, overflow: 0 })
+  expect(sessions[0]!.counts).toEqual({ total: 2, working: 1, blocked: 0, overflow: 0, quiet: 0 })
   expect(p.statuses[p.statuses.length - 1]).toBe('party: 1 working, 2 need you')
 })
 
@@ -631,6 +631,7 @@ test('three-second refreshes move a running terminal sweep within the same displ
   p.context.clock.now = async () => now
   await hooks['session.start']!(p.context, start, async () => ({}))
   now += 3600000
+  await hooks['tool.call']!(p.context, { agentId: 'a', tool: 'Read' }, async () => ({}))
   await p.refresh()
   const before = p.view()
   now += 3000
@@ -646,6 +647,7 @@ test('three-second refreshes leave an unchanged nonrunning roster alone', async 
   p.context.agent.list = async () => [{ id: 'a', type: 'Explore', description: 'Map hooks', status: 'waiting' }]
   await hooks['session.start']!(p.context, start, async () => ({}))
   now += 3600000
+  await hooks['tool.call']!(p.context, { agentId: 'a', tool: 'Read' }, async () => ({}))
   await p.refresh()
   const before = p.view()
   now += 3000
@@ -952,4 +954,39 @@ test('a not found scan exit clears the Python cache while preserving the last la
   await p.tick()
   expect(p.resolver.calls).toBe(2)
   expect(p.scanArgv.slice(-1)[0]![0]).toBe('/synthetic/second/python3')
+})
+
+test('tool activity uses a numeric clock timestamp, revives quiet agents, and retains no tool content', async () => {
+  const p = stampedContext()
+  let now = NOW
+  p.context.clock.now = async () => now
+  await hooks['session.start']!(p.context, start, async () => ({}))
+  now += 660000
+  await p.refresh()
+  expect((p.view() as any).quiet).toBe(1)
+  expect(p.view().rows.map(r => r.id)).toEqual(['main'])
+  await hooks['tool.call']!(p.context, { agentId: 'a', tool: 'Bash', command: 'SYNTHETIC_PRIVATE_CONTENT', content: 'SYNTHETIC_PRIVATE_CONTENT' }, async () => ({}))
+  await p.refresh()
+  expect(p.view().rows.map(r => r.id)).toEqual(['main', 'a'])
+  now += 600000
+  await p.refresh()
+  expect((p.view() as any).quietSince).toBe(NOW + 660000)
+  expect(typeof (p.view() as any).quietSince).toBe('number')
+  expect(p.store['s:s1'].counts.quiet).toBe(2)
+  expect(JSON.stringify([p.view(), p.store]).includes('SYNTHETIC_PRIVATE_CONTENT')).toBe(false)
+})
+
+test('foreign quiet snapshots retain counts and quiet elapsed redraws without live rows', async () => {
+  const p = stampedContext()
+  let now = NOW
+  p.context.clock.now = async () => now
+  p.context.agent.list = async () => []
+  p.store['s:foreign'] = { id: 'foreign', label: 'Other', at: NOW, startedAt: NOW, agents: [], quietSince: NOW - 660000,
+    counts: { total: 0, working: 0, blocked: 0, overflow: 0, quiet: 2 } }
+  await hooks['session.start']!(p.context, start, async () => ({}))
+  expect((p.view().sessions![1]!.counts as any).quiet).toBe(2)
+  const before = p.view()
+  now += 1000
+  await p.refresh()
+  expect(p.view() === before).toBe(false)
 })
