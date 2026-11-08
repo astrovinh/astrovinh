@@ -9,7 +9,7 @@ A Claude Code mod that draws one row above the prompt, always visible:
 Limit bars turn amber at 60% and red at 85%. A second line shows reset times and the context legend.
 
 On desktop, click the CPU, Mem or Disk pill to open its read-only drawer.
-The frosted desktop band scales with the pane and drops sections to keep text readable.
+The desktop band scales with the pane and drops sections to keep text readable.
 
 ## Use it
 

@@ -249,7 +249,7 @@ export function usd(n: number): string {
   return `$${cut(n / 1000, 0)}k`
 }
 
-/** Day, Week and Ctx share one frosted shell; native pill buttons sit over its right side. */
+/** Day, Week and Ctx share one row; native pill buttons sit over its right side. */
 export function bandSvg(a: BandInput, columns?: number): { source: string; alt: string; width: number; height: number; layout: DesktopLayout } {
   const layout = desktopLayout(columns, a.spend !== null, a.system !== null)
   const { cells } = contextCells(a.segments, BAR_W)
@@ -268,7 +268,7 @@ export function bandSvg(a: BandInput, columns?: number): { source: string; alt: 
     ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null)
     : limitGroup(i, panel === 'day' ? 'Day' : 'Week', panel === 'day' ? a.day : a.week)).join('')
   const source =
-    svgOpen(baseWidth, BAND_H, layout.scale, 11) + frost(baseWidth, BAND_H) +
+    svgOpen(baseWidth, BAND_H, layout.scale, 11) +
     `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
     (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_W + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
     `</g>` +
@@ -307,16 +307,9 @@ export function systemPills(sys: System | null) {
   }))
 }
 
-/** No theme signal in this drawing: a subtle neutral underlay gives the white frost an edge on light too. */
-function frost(width: number, height: number, radius = 14): string {
-  return `<rect x="0.5" y="0.5" width="${Math.max(0, width - 1)}" height="${height - 1}" rx="${radius}" fill="#000" fill-opacity="0.08"/>` +
-    `<rect x="0.5" y="0.5" width="${Math.max(0, width - 1)}" height="${height - 1}" rx="${radius}" fill="#fff" fill-opacity="0.07" stroke="#fff" stroke-opacity="0.16" stroke-width="1"/>` +
-    `<path d="M ${radius} 1 H ${Math.max(radius, width - radius)}" fill="none" stroke="#fff" stroke-opacity="0.10" stroke-width="1"/>`
-}
-
 /** The Button supplies the native focus ring and text; this SVG supplies its rounded skin. */
 export function pillSvg(scale: number): string {
-  return svgOpen(PILL_W, PILL_H, scale, 13) + frost(PILL_W, PILL_H, 999) + '</svg>'
+  return svgOpen(PILL_W, PILL_H, scale, 13) + '</svg>'
 }
 
 export function spacerSvg(width: number): string {
@@ -371,7 +364,7 @@ function card(lines: CardLine[], scale: number, maxWidth: number, reserve = 0): 
   }
   const height = y + PAD + reserve
   return {
-    source: svgOpen(width, height, scale, 14) + frost(width, height) + parts.join('') + '</svg>',
+    source: svgOpen(width, height, scale, 14) + parts.join('') + '</svg>',
     alt: lines.map(l => l.text).join(', '), width: maxWidth, height: height * scale
   }
 }
