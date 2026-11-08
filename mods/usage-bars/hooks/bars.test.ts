@@ -1,5 +1,6 @@
 import { test, expect } from 'claude-code/testing'
-import { allocate, bandSvg, BAND_W, contextCells, detailSvg, layoutWidth, limitCells, terminalLayout, untilReset, usd } from './bars'
+import * as bars from './bars'
+import { allocate, bandSvg, contextCells, detailSvg, layoutWidth, limitCells, terminalLayout, untilReset, usd } from './bars'
 import type { TerminalLayout } from './bars'
 
 const full: TerminalLayout = { bar: 10, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
@@ -134,7 +135,7 @@ test('untilReset formats days, hours, minutes', () => {
 
 test('band shows a dash when a limit has no reading', () => {
   const { source, alt } = bandSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 })
-  expect(source.includes(`width="${BAND_W}"`)).toBe(true)
+  expect(source.includes('>Day<')).toBe(true)
   expect(source.includes('>\u2013<')).toBe(true)
   expect(alt).toBe('Day no reading, Week no reading, Context no reading')
 })
@@ -183,14 +184,84 @@ test("band shows the week's spend at the right, and leaves it out when unknown",
   expect(detailSvg({ segments: [], contextPercent: null, spend, system: null, now: 0 }).alt.includes('Week $140.13 \u00b7 today $27.41 in 6 sessions \u00b7 this session $3.41 \u00b7 API prices')).toBe(true)
 })
 
-test('band adds a ring per system reading, widens to fit, and skips a missing battery', () => {
+test('band keeps its system alt text while pills replace the old rings', () => {
   const system = { cpu: 27, cores: 10, memory: 32, memoryGb: 34, disk: { percent: 77, freeGb: 224 }, battery: null }
   const b = bandSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
-  expect(b.width > BAND_W).toBe(true)
-  expect(b.source.includes(`width="${b.width}"`)).toBe(true)
-  expect(b.source.includes('>CPU 27%<') && b.source.includes('>Mem 32%<') && b.source.includes('>Disk 77%<')).toBe(true)
+  expect(b.source.includes('stroke-dasharray')).toBe(false)
   expect(b.source.includes('Bat')).toBe(false)
   expect(b.alt.endsWith(', CPU 27%, Memory 32%, Disk 77%')).toBe(true)
   const d = detailSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
   expect(d.alt.includes('CPU 27% of 10 cores, Memory 32% of 34 GB, Disk 224 GB free')).toBe(true)
+})
+
+const desktop = bars
+const sys = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
+const input = { segments: [], contextPercent: null, spend: { week: 1, today: 1, sessionsToday: 1, session: 1 }, system: sys, now: 0 }
+
+test('desktop scale clamps and is monotone over columns 1 through 300', () => {
+  expect(typeof desktop.bandScale).toBe('function')
+  expect(desktop.bandScale(undefined)).toBe(1.15)
+  expect(desktop.bandScale(1)).toBe(1.15)
+  expect(desktop.bandScale(300)).toBe(1.6)
+  let previous = 1.15
+  for (let columns = 1; columns <= 300; columns++) {
+    const scale = desktop.bandScale(columns)
+    expect(scale).toBeGreaterThanOrEqual(previous)
+    expect(scale).toBeLessThanOrEqual(1.6)
+    previous = scale
+  }
+})
+
+test('desktop drawn width fits every pane or draws nothing, without shrinking text', () => {
+  expect(typeof desktop.desktopLayout).toBe('function')
+  for (let columns = 1; columns <= 300; columns++) {
+    const layout = desktop.desktopLayout(columns)
+    const band = bandSvg(input, columns)
+    expect(layout.scale).toBeGreaterThanOrEqual(1.15)
+    expect(band.width === 0 || band.width <= columns * 7 - 16, `drawn width at ${columns} columns`).toBe(true)
+    expect(band.width).toBe(layout.width)
+  }
+})
+
+test('desktop drops dollars, pills, context, then week at four compact widths', () => {
+  expect(typeof desktop.desktopLayout).toBe('function')
+  expect(desktop.desktopLayout(125)).toMatchObject({ spend: false, system: true, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(100)).toMatchObject({ spend: false, system: false, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(60)).toMatchObject({ spend: false, system: false, panels: ['day', 'week'] })
+  expect(desktop.desktopLayout(40)).toMatchObject({ spend: false, system: false, panels: ['day'] })
+  expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, panels: ['day', 'week', 'ctx'] })
+})
+
+test('hover card uses 14px body, 13px secondary, and never renders text below 13px', () => {
+  for (let columns = 1; columns <= 300; columns++) {
+    const scale = typeof desktop.bandScale === 'function' ? desktop.bandScale(columns) : 1
+    const detail = detailSvg(input, scale)
+    const fonts = [...detail.source.matchAll(/font-size="([\d.]+)"/g)].map(m => Number(m[1]))
+    expect(fonts.length).toBeGreaterThanOrEqual(2)
+    expect(fonts.includes(14)).toBe(true)
+    expect(fonts.includes(13)).toBe(true)
+    for (const font of fonts) expect(font * scale).toBeGreaterThanOrEqual(13)
+    expect(detail.source).toContain('font-variant-numeric:tabular-nums')
+  }
+})
+
+test('system pills label each reading, preserve severity, and disable missing readings', () => {
+  expect(typeof desktop.systemPills).toBe('function')
+  expect(desktop.systemPills(sys).map(p => `${p.label} ${p.value}`)).toEqual(['CPU 18%', 'Mem 71%', 'Disk 83%'])
+  expect(desktop.systemPills(sys).map(p => p.color)).toEqual(['#9ece6a', '#e0af68', '#e0af68'])
+  for (const percent of [0, 59, 60, 84, 85, 100]) {
+    const pills = desktop.systemPills({ ...sys, cpu: percent, memory: percent, disk: { percent, freeGb: 0 } })
+    expect(pills.map(p => p.color)).toEqual(Array(3).fill(bars.severityColor(percent)))
+  }
+  expect(desktop.systemPills({ ...sys, cpu: null })[0]).toMatchObject({ label: 'CPU', value: '\u2013', enabled: false })
+  expect(desktop.systemPills(null)).toEqual([])
+})
+
+test('drawer uses existing readings only and disappears without a panel or system', () => {
+  expect(typeof desktop.drawer).toBe('function')
+  expect(desktop.drawer('cpu', sys, 1.15)?.alt).toBe('CPU, CPU 18% used')
+  expect(desktop.drawer('mem', sys, 1.15)?.alt).toBe('Memory, Memory 71% used')
+  expect(desktop.drawer('disk', sys, 1.15)?.alt).toBe('Disk, Disk 83% used')
+  expect(desktop.drawer(null, sys, 1.15)).toBe(null)
+  expect(desktop.drawer('mem', null, 1.15)).toBe(null)
 })
