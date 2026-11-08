@@ -369,31 +369,13 @@ function card(lines: CardLine[], scale: number, maxWidth: number, reserve = 0): 
   }
 }
 
-/** Same hover content and alt text, now wrapped at 14px / 13px with 1.5 line spacing. */
+/** One plain hover line with reset times and today's spend. */
 export function detailSvg(a: BandInput, scale = 1, maxWidth = BAND_W * scale): Card {
-  const lines: CardLine[] = []
-  const say = (text: string, secondary = false, color?: string) => lines.push({ text, secondary, color })
-
-  if (a.day?.resetsAt) say(`Day resets in ${untilReset(a.day.resetsAt, a.now)}`)
-  if (a.week?.resetsAt) say(`Week resets in ${untilReset(a.week.resetsAt, a.now)}`)
-  if (!a.day && !a.week) say('No limit reading yet')
-  if (a.spend !== null) {
-    const n = a.spend.sessionsToday
-    say(`Week $${a.spend.week.toFixed(2)} \u00b7 today $${a.spend.today.toFixed(2)} in ${n} session${n === 1 ? '' : 's'} \u00b7 this session $${a.spend.session.toFixed(2)} \u00b7 API prices`)
-  }
-
-  const s = a.system
-  const used = a.segments.filter(seg => seg.kind === 'used' && seg.tokens > 0)
-  if (s?.cpu != null) say(`CPU ${Math.round(s.cpu)}% of ${s.cores} cores`, true)
-  if (s?.memory != null) say(`Memory ${Math.round(s.memory)}%${s.memoryGb ? ` of ${Math.round(s.memoryGb)} GB` : ''}`, true)
-  if (s?.disk) say(`Disk ${Math.round(s.disk.freeGb)} GB free`, true)
-  if (s?.battery) say(`Battery ${Math.round(s.battery.percent)}%, ${s.battery.state}`, true)
-
-  const { legend } = contextCells(a.segments, BAR_W)
-  used.forEach((seg, i) => {
-    say(`${seg.name} ${tokens(seg.tokens)}`, true, legend[i]?.color ?? INK)
-  })
-  return card(lines, scale, maxWidth)
+  const parts: string[] = []
+  if (a.day?.resetsAt) parts.push(`Day resets in ${untilReset(a.day.resetsAt, a.now)}`)
+  if (a.week?.resetsAt) parts.push(`Week resets in ${untilReset(a.week.resetsAt, a.now)}`)
+  if (a.spend !== null) parts.push(`Today $${a.spend.today.toFixed(2)}`)
+  return card([{ text: parts.join(' \u00b7 ') || 'No limit reading yet' }], scale, maxWidth)
 }
 
 /** Lane B can add action rows here; no probes or cleanup commands belong in this shell. */

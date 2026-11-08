@@ -147,20 +147,60 @@ test('band fills a limit bar in proportion, colored by severity', () => {
   expect(source.includes('>50%<')).toBe(true)
 })
 
-test('hover row says when there is no limit reading, and gives reset times when there is', () => {
-  const now = Date.parse('2026-10-02T00:00:00Z')
-  expect(detailSvg({ segments: [], contextPercent: null, spend: null, system: null, now }).alt).toBe('No limit reading yet')
-  const { alt } = detailSvg({ day: { percentUsed: 5, resetsAt: '2026-10-02T02:10:00Z' }, week: { percentUsed: 9, resetsAt: '2026-10-05T04:00:00Z' }, segments: [], contextPercent: null, spend: null, system: null, now })
-  expect(alt).toBe('Day resets in 2h 10m, Week resets in 3d 4h')
+test('hover is one line with day, week and today', () => {
+  const now = Date.parse('2026-11-08T00:00:00Z')
+  const detail = detailSvg({
+    day: { percentUsed: 5, resetsAt: '2026-11-08T00:37:00Z' },
+    week: { percentUsed: 9, resetsAt: '2026-11-12T12:00:00Z' },
+    segments: [], contextPercent: null,
+    spend: { week: 140.129, today: 101.58, sessionsToday: 6, session: 3.41 },
+    system: null, now
+  })
+  const line = 'Day resets in 37m \u00b7 Week resets in 4d 12h \u00b7 Today $101.58'
+  expect(detail.alt).toBe(line)
+  expect([...detail.source.matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map(m => m[1])).toEqual([line])
+  expect(detail.source).toContain('font-size="14"')
 })
 
-test('hover row escapes category names and colors each like its bar', () => {
-  const segs = [{ name: 'A<b>&"c', tokens: 12000, kind: 'used' as const }, { name: 'Free', tokens: 9000, kind: 'free' as const }]
-  const { source } = detailSvg({ segments: segs, contextPercent: 6, spend: null, system: null, now: 0 })
-  expect(source.includes('A&lt;b&gt;&amp;&quot;c 12k')).toBe(true)
-  expect(source.includes('A<b>')).toBe(false)
-  expect(source.includes(`fill="${contextCells(segs, 56).legend[0]!.color}"`)).toBe(true)
-  expect(source.includes('Free')).toBe(false)
+test('no reading shows one plain line', () => {
+  const detail = detailSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 })
+  expect(detail.alt).toBe('No limit reading yet')
+  expect([...detail.source.matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map(m => m[1])).toEqual(['No limit reading yet'])
+})
+
+test('hover joins only present day, week and today parts', () => {
+  for (let mask = 0; mask < 8; mask++) {
+    const day = mask & 1 ? { percentUsed: 5, resetsAt: '1970-01-01T00:37:00Z' } : undefined
+    const week = mask & 2 ? { percentUsed: 9, resetsAt: '1970-01-05T12:00:00Z' } : undefined
+    const spend = mask & 4 ? { week: 140, today: 0, sessionsToday: 6, session: 3 } : null
+    const parts = [day ? 'Day resets in 37m' : '', week ? 'Week resets in 4d 12h' : '', spend ? 'Today $0.00' : ''].filter(Boolean)
+    const detail = detailSvg({ day, week, spend, segments: [], contextPercent: null, system: null, now: 0 })
+    const line = parts.join(' \u00b7 ') || 'No limit reading yet'
+    expect(detail.alt).toBe(line)
+    expect([...detail.source.matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map(m => m[1])).toEqual([line])
+  }
+})
+
+test('hover omits limits without reset times', () => {
+  const a = { day: { percentUsed: 5 }, week: { percentUsed: 9, resetsAt: '' }, segments: [], contextPercent: null, system: null, now: 0 }
+  expect(detailSvg({ ...a, spend: null }).alt).toBe('No limit reading yet')
+  expect(detailSvg({ ...a, spend: { week: 140, today: 27.416, sessionsToday: 6, session: 3 } }).alt).toBe('Today $27.42')
+})
+
+test('hover drops system and spend detail', () => {
+  const detail = detailSvg({
+    segments: [{ name: 'A<b>&"c', tokens: 12000, kind: 'used' }, { name: 'Free', tokens: 9000, kind: 'free' }],
+    contextPercent: 6,
+    spend: { week: 140.129, today: 27.41, sessionsToday: 6, session: 3.41 },
+    system: { cpu: 27, cores: 10, memory: 32, memoryGb: 34, disk: { percent: 77, freeGb: 224 }, battery: { percent: 80, state: 'charging' } },
+    now: 0
+  })
+  for (const omitted of ['CPU', 'Memory', 'Disk', 'Battery', 'Week $', 'sessions', 'this session', 'API prices', 'A<b>', 'A&lt;b&gt;', '12k', 'Free', '<circle']) {
+    expect(detail.alt.includes(omitted), `alt omits ${omitted}`).toBe(false)
+    expect(detail.source.includes(omitted), `SVG omits ${omitted}`).toBe(false)
+  }
+  expect(detail.alt).toBe('Today $27.41')
+  expect([...detail.source.matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map(m => m[1])).toEqual(['Today $27.41'])
 })
 
 test('usd cuts digits short and never rounds up', () => {
@@ -181,7 +221,7 @@ test("band shows the week's spend at the right, and leaves it out when unknown",
   expect(shown.source.includes('>$140<')).toBe(true)
   expect(shown.alt.endsWith(', This week $140')).toBe(true)
   expect(bandSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 }).source.includes('$')).toBe(false)
-  expect(detailSvg({ segments: [], contextPercent: null, spend, system: null, now: 0 }).alt.includes('Week $140.13 \u00b7 today $27.41 in 6 sessions \u00b7 this session $3.41 \u00b7 API prices')).toBe(true)
+  expect(detailSvg({ segments: [], contextPercent: null, spend, system: null, now: 0 }).alt).toBe('Today $27.41')
 })
 
 test('band keeps its system alt text while pills replace the old rings', () => {
@@ -191,7 +231,7 @@ test('band keeps its system alt text while pills replace the old rings', () => {
   expect(b.source.includes('Bat')).toBe(false)
   expect(b.alt.endsWith(', CPU 27%, Memory 32%, Disk 77%')).toBe(true)
   const d = detailSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
-  expect(d.alt.includes('CPU 27% of 10 cores, Memory 32% of 34 GB, Disk 224 GB free')).toBe(true)
+  expect(d.alt).toBe('No limit reading yet')
 })
 
 const desktop = bars
@@ -232,14 +272,14 @@ test('desktop drops dollars, pills, context, then week at four compact widths', 
   expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, panels: ['day', 'week', 'ctx'] })
 })
 
-test('hover card uses 14px body, 13px secondary, and never renders text below 13px', () => {
+test('hover card uses one 14px body line and never renders text below 13px', () => {
   for (let columns = 1; columns <= 300; columns++) {
     const scale = typeof desktop.bandScale === 'function' ? desktop.bandScale(columns) : 1
     const detail = detailSvg(input, scale)
     const fonts = [...detail.source.matchAll(/font-size="([\d.]+)"/g)].map(m => Number(m[1]))
     expect(fonts.length).toBeGreaterThanOrEqual(2)
     expect(fonts.includes(14)).toBe(true)
-    expect(fonts.includes(13)).toBe(true)
+    expect(fonts.includes(13)).toBe(false)
     for (const font of fonts) expect(font * scale).toBeGreaterThanOrEqual(13)
     expect(detail.source).toContain('font-variant-numeric:tabular-nums')
   }
