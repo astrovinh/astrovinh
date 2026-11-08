@@ -12,18 +12,10 @@ function readings(on: On) {
     limits: [{ kind: 'five_hour', percentUsed: 100 }, { kind: 'seven_day', percentUsed: 100 }],
     segments: [{ name: 'Used', kind: 'used', tokens: 100 }],
     contextPercent: 100,
-    panel: null,
     spend: { week: 1299, today: 0, sessionsToday: 1, session: 0 },
     system: { cpu: 100, cores: 1, memory: 100, memoryGb: 1, disk: { percent: 100, freeGb: 0 }, battery: null }
   }
-  let version = 1
-  on('state.get', (_, e) => ({ value: { value: state[e.key], version }, version }))
-  on('state.set', (_, e) => {
-    state[e.key] = e.value
-    version += 1
-    return { value: { isSet: true as const, version }, version }
-  })
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => e.surface === 'desktop' ? $.ui.resolve(e).Box({}) : next(e))
+  on('state.get', (_, e) => ({ value: { value: state[e.key], version: 1 }, version: 1 }))
   return state
 }
 
@@ -156,94 +148,16 @@ test('an unmeasured terminal keeps the full band', async ($, on) => {
   }
 })
 
-test('the desktop yields when even Day cannot fit at the minimum scale', async ($, on) => {
+test('the desktop still draws the full SVG band in a narrow viewport', async ($, on) => {
   readings(on)
   const ui = await $.ui.mount({
     plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props,
     viewport: { columns: 12, rows: 24 }
   })
   try {
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(0)
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(2)
+    expect((await ui.findAll({ type: 'Svg' }))[0]!.props.alt).toBe('Day 100%, Week 100%, Context 100%, This week $1.2k, CPU 100%, Memory 100%, Disk 100%')
   } finally {
     await ui.unmount()
   }
-})
-
-for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
-  test(`desktop SVGs fit the available pixels at ${columns} columns`, async ($, on) => {
-    readings(on)
-    const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns, rows: 24 } })
-    try {
-      const svgs = await ui.findAll({ type: 'Svg' })
-      // A validation refusal must not masquerade as a zero-width successful render.
-      expect(svgs.length).toBe(columns <= 12 ? 0 : columns >= 125 ? 8 : 2)
-      for (const svg of svgs) {
-        expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
-      }
-    } finally { await ui.unmount() }
-  })
-}
-
-test('desktop pills open, switch, toggle and close the read-only drawer through the real hook', async ($, on) => {
-  const state = readings(on)
-  state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
-  const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
-  try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['CPU 18%', 'Mem 71%', 'Disk 83%'])
-    await ui.press({ key: 'usage-mem' })
-    expect(state.panel).toBe('mem')
-    await ui.redraw() // The mocked state store does not send the host's subscription notification.
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(true)
-    await ui.press({ key: 'usage-mem' })
-    expect(state.panel).toBe(null)
-    await ui.redraw()
-    expect(await ui.find({ key: 'usage-close' })).toBe(undefined)
-    await ui.press({ key: 'usage-cpu' })
-    expect(state.panel).toBe('cpu')
-    await ui.press({ key: 'usage-disk' })
-    expect(state.panel).toBe('disk')
-    await ui.redraw()
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Disk 83% used'))).toBe(true)
-    await ui.press({ key: 'usage-close' })
-    expect(state.panel).toBe(null)
-    await ui.redraw()
-    expect(await ui.find({ key: 'usage-close' })).toBe(undefined)
-  } finally { await ui.unmount() }
-})
-
-// Captured from the original hook in an isolated baseline copy, before desktop edits.
-// FNV-1a over the entire serialized tree pins every terminal node, prop and text byte.
-function terminalBytes(node: RenderNode): number {
-  let hash = 2166136261
-  for (const ch of JSON.stringify(node)) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619)
-  return hash >>> 0
-}
-for (const [columns, snapshot] of [
-  [120, 847387973], [80, 2191326550], [60, 3391757860], [40, 4197371263],
-  [30, 4082337182], [20, 329619674], [12, 329619674]
-] as const) {
-  test(`terminal tree bytes match the original at ${columns} columns`, async ($, on) => {
-    readings(on)
-    const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'terminal', component: 'AbovePrompt', props, viewport: { columns, rows: 24 } })
-    try { expect(terminalBytes(await ui.drawn())).toBe(snapshot) }
-    finally { await ui.unmount() }
-  })
-}
-
-test('missing readings are unpressable and losing system data hides an open drawer', async ($, on) => {
-  const state = readings(on)
-  state.system = { cpu: null, cores: 8, memory: 71, memoryGb: 32, disk: null, battery: null }
-  const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
-  try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['Mem 71%'])
-    expect(await ui.find({ key: 'usage-cpu' })).toBe(undefined)
-    expect(await ui.find({ type: 'Text', text: 'CPU \u2013' })).not.toBe(undefined)
-    await ui.press({ key: 'usage-mem' })
-    await ui.redraw()
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(true)
-    state.system = null
-    await ui.redraw()
-    expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(false)
-  } finally { await ui.unmount() }
 })

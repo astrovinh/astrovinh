@@ -19,7 +19,6 @@ declare module 'claude-code' {
       limits: Limit[]
       spend: Spend | null
       system: System | null
-      panel: 'cpu' | 'mem' | 'disk' | null
     }
   }
 }

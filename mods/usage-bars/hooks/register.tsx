@@ -2,8 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_GAP, PILL_H, PILL_W, pillSvg, spacerSvg, systemPills, terminalLayout, usd } from './bars'
-import type { Cell, Panel } from './bars'
+import { bandSvg, BAND_H, contextCells, detailSvg, limitCells, terminalLayout, usd } from './bars'
+import type { Cell } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
 import { parseCpu, parseDisk, parseMemory } from './system'
@@ -14,7 +14,6 @@ const contextPercent = atom({ plugin: 'usage-bars', key: 'contextPercent' } as c
 const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limit[])
 const spend = atom({ plugin: 'usage-bars', key: 'spend' } as const, null as Spend | null)
 const system = atom({ plugin: 'usage-bars', key: 'system' } as const, null as System | null)
-const openPanel = atom({ plugin: 'usage-bars', key: 'panel' } as const, null as Panel | null)
 
 const SYSTEM_MS = 10_000
 
@@ -108,51 +107,16 @@ export const register: Register = on => {
     const week = lims.find(l => l.kind === 'seven_day')
 
     if (e.surface === 'desktop') {
-      const { Box, Svg, Button, Text } = $.ui.resolve(e)
+      const { Box, Svg } = $.ui.resolve(e)
       const input = { day, week, segments: segs, contextPercent: pct, spend: spent, system: sys, now }
-      const band = bandSvg(input, e.viewport?.columns)
-      if (!band.width) return next(e)
-      const { scale } = band.layout
-      const detail = detailSvg(input, scale, band.width)
-      const opened = drawer(await read($, openPanel), sys, scale, band.width)
-      // SVGs size the row and its spacers in pixels; Boxes only align the controls.
+      const band = bandSvg(input)
+      const detail = detailSvg(input)
       return (
         <Box key="usage-bars" flexDirection="column" paddingX={1}>
-          <Box alignSelf="flex-start" flexShrink={0}>
-            <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} />
-            {!band.layout.system ? null : (
-              <Box position="absolute" top={0} left={0} height="100%" flexDirection="row" gap={0} alignItems="center">
-                <Svg source={spacerSvg(band.layout.pillStart)} alt="" width={band.layout.pillStart} height={1} />
-                {systemPills(sys).map((pill, i) => (
-                  <Box key={`pill-${pill.panel}`} flexDirection="row" gap={0} alignItems="center" flexShrink={0}>
-                    <Box alignSelf="flex-start">
-                      <Svg source={pillSvg(scale)} alt="" width={PILL_W * scale} height={PILL_H * scale} />
-                      <Box position="absolute" top={0} left={0} width="100%" height="100%" alignItems="center" justifyContent="center">
-                        {pill.enabled ? (
-                          <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
-                            onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
-                            <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular color={pill.color}>{`${pill.label} ${pill.value}`}</Text>
-                          </Button>
-                        ) : <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular color={pill.color}>{`${pill.label} ${pill.value}`}</Text>}
-                      </Box>
-                    </Box>
-                    {i === 2 ? null : <Svg source={spacerSvg(PILL_GAP * scale)} alt="" width={PILL_GAP * scale} height={1} />}
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
+          <Svg source={band.source} alt={band.alt} width={band.width} height={BAND_H} />
           <Box display="none" hover={{ display: 'flex' }}>
             <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
           </Box>
-          {!opened ? null : (
-            <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
-              <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
-              <Box position="absolute" bottom={0} left={0} width="100%" flexDirection="row" justifyContent="flex-end" paddingX={1}>
-                <Button key="usage-close" plain onPress={async () => { await update($, openPanel, () => null) }}>Close</Button>
-              </Box>
-            </Box>
-          )}
         </Box>
       )
     }
