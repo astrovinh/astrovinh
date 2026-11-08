@@ -142,7 +142,7 @@ const BAR_H = 4
 const LABEL_W = 32
 const BAR_W = 56
 const PCT_GAP = 5
-const PCT_W = 25
+const PCT_W = 30
 const GROUP_GAP = 14
 const GROUP_W = LABEL_W + BAR_W + PCT_GAP + PCT_W
 const INK = '#8b8b8b'
@@ -150,10 +150,52 @@ const FAINT = 'rgba(139,139,139,0.45)'
 const TRACK = 'rgba(139,139,139,0.22)'
 const BUFFER = 'rgba(139,139,139,0.38)'
 
-const COST_W = 36
+const COST_W = 48
+const PAD = 12
+export const PILL_W = 98
+export const PILL_H = 28
+export const PILL_GAP = 8
+const PILLS_W = PILL_W * 3 + PILL_GAP * 2
 
-export const BAND_W = (GROUP_W + GROUP_GAP) * 3 + COST_W
-export const BAND_H = H
+export const BAND_W = PAD * 2 + GROUP_W * 3 + GROUP_GAP * 4 + COST_W + PILLS_W
+export const BAND_H = 42
+
+/** The host measures panes in code-font cells; SVGs draw in CSS pixels. */
+export function bandScale(columns: number | undefined): number {
+  const available = columns === undefined ? BAND_W : columns * 7 - 16
+  return Math.max(1.15, Math.min(1.6, available / BAND_W))
+}
+
+type DesktopLayout = {
+  panels: ('day' | 'week' | 'ctx')[]
+  spend: boolean
+  system: boolean
+  scale: number
+  width: number
+  pillStart: number
+}
+
+/** Keep readable type, dropping whole sections before they would overflow. */
+export function desktopLayout(columns: number | undefined, spend = true, system = true): DesktopLayout {
+  const scale = bandScale(columns)
+  const available = columns === undefined ? Infinity : columns * 7 - 16
+  const full = { panels: ['day', 'week', 'ctx'] as DesktopLayout['panels'], spend, system }
+  const candidates = [
+    full,
+    { ...full, spend: false },
+    { ...full, spend: false, system: false },
+    { ...full, spend: false, system: false, panels: ['day', 'week'] as DesktopLayout['panels'] },
+    { ...full, spend: false, system: false, panels: ['day'] as DesktopLayout['panels'] }
+  ]
+  for (const candidate of candidates) {
+    const content = PAD + candidate.panels.length * GROUP_W + (candidate.panels.length - 1) * GROUP_GAP +
+      (candidate.spend ? GROUP_GAP + COST_W : 0)
+    const pillStart = content + GROUP_GAP
+    const width = (candidate.system ? pillStart + PILLS_W + PAD : content + PAD) * scale
+    if (width <= available) return { ...candidate, scale, width, pillStart: pillStart * scale }
+  }
+  return { panels: [], spend: false, system: false, scale, width: 0, pillStart: 0 }
+}
 
 export function esc(s: string): string {
   return s.replace(/[&<>"]/g, c => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'))
@@ -194,7 +236,6 @@ function limitGroup(i: number, label: string, r: Reading | undefined): string {
 }
 
 import type { Spend, System } from '../types'
-import { ring, ringColor } from './system'
 
 type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; spend: Spend | null; system: System | null; now: number }
 
@@ -208,8 +249,9 @@ export function usd(n: number): string {
   return `$${cut(n / 1000, 0)}k`
 }
 
-/** Day, Week and Ctx as one row: tiny labels, thin rounded bars. */
-export function bandSvg(a: BandInput): { source: string; alt: string; width: number } {
+/** Day, Week and Ctx share one frosted shell; native pill buttons sit over its right side. */
+export function bandSvg(a: BandInput, columns?: number): { source: string; alt: string; width: number; height: number; layout: DesktopLayout } {
+  const layout = desktopLayout(columns, a.spend !== null, a.system !== null)
   const { cells } = contextCells(a.segments, BAR_W)
   const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '\u2500' ? BUFFER : 'transparent') }))
 
@@ -219,18 +261,20 @@ export function bandSvg(a: BandInput): { source: string; alt: string; width: num
     (a.spend === null ? '' : `, This week ${usd(a.spend.week)}`) +
     sysItems(a.system).map(i => `, ${i.name} ${Math.round(i.percent)}%`).join('')
 
-  const rings = sysRings(a.system, (GROUP_W + GROUP_GAP) * 3 + COST_W + RING_GAP)
-  const width = rings.width || BAND_W
+  const width = layout.width
+  const height = BAND_H * layout.scale
+  const baseWidth = width / layout.scale
+  const groups = layout.panels.map((panel, i) => panel === 'ctx'
+    ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null)
+    : limitGroup(i, panel === 'day' ? 'Day' : 'Week', panel === 'day' ? a.day : a.week)).join('')
   const source =
-    svgOpen(width) +
-    limitGroup(0, 'Day', a.day) +
-    limitGroup(1, 'Week', a.week) +
-    group(2, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null) +
-    (a.spend === null ? '' : `<text x="${(GROUP_W + GROUP_GAP) * 3}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
-    rings.source +
+    svgOpen(baseWidth, BAND_H, layout.scale, 11) + frost(baseWidth, BAND_H) +
+    `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
+    (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_W + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
+    `</g>` +
     `</svg>`
 
-  return { source, alt, width }
+  return { source: width ? source : '', alt, width, height, layout }
 }
 
 type SysItem = { label: string; name: string; percent: number; kind: 'load' | 'battery' }
@@ -246,23 +290,37 @@ function sysItems(s: System | null): SysItem[] {
   return items.filter((i): i is SysItem => i !== null)
 }
 
-const RING_GAP = 10
-const RING_R = 5
+export type Panel = 'cpu' | 'mem' | 'disk'
 
-/** CPU, memory, disk and battery as small rings, each with its label and percent, from `x`. */
-function sysRings(s: System | null, x: number): { source: string; width: number } {
-  const items = sysItems(s)
-  if (!items.length) return { source: '', width: 0 }
-  let at = x
-  const parts = items.map(i => {
-    const text = `${i.label} ${Math.round(i.percent)}%`
-    const part =
-      ring(at + RING_R + 1, H / 2, RING_R, i.percent, ringColor(i.kind, i.percent), TRACK) +
-      `<text x="${at + 2 * RING_R + 6}" y="10.5" fill="${INK}">${text}</text>`
-    at += 2 * RING_R + 6 + textWidth(text) + RING_GAP
-    return part
-  })
-  return { source: parts.join(''), width: Math.ceil(at - RING_GAP) }
+/** Missing readings remain visible but are never controls. */
+export function systemPills(sys: System | null) {
+  if (sys === null) return []
+  return ([
+    { panel: 'cpu', label: 'CPU', percent: sys.cpu },
+    { panel: 'mem', label: 'Mem', percent: sys.memory },
+    { panel: 'disk', label: 'Disk', percent: sys.disk?.percent ?? null }
+  ] as const).map(p => ({
+    ...p,
+    value: p.percent === null ? '\u2013' : `${Math.round(p.percent)}%`,
+    color: p.percent === null ? INK : severityColor(p.percent),
+    enabled: p.percent !== null
+  }))
+}
+
+/** No theme signal in this drawing: a subtle neutral underlay gives the white frost an edge on light too. */
+function frost(width: number, height: number, radius = 14): string {
+  return `<rect x="0.5" y="0.5" width="${Math.max(0, width - 1)}" height="${height - 1}" rx="${radius}" fill="#000" fill-opacity="0.08"/>` +
+    `<rect x="0.5" y="0.5" width="${Math.max(0, width - 1)}" height="${height - 1}" rx="${radius}" fill="#fff" fill-opacity="0.07" stroke="#fff" stroke-opacity="0.16" stroke-width="1"/>` +
+    `<path d="M ${radius} 1 H ${Math.max(radius, width - radius)}" fill="none" stroke="#fff" stroke-opacity="0.10" stroke-width="1"/>`
+}
+
+/** The Button supplies the native focus ring and text; this SVG supplies its rounded skin. */
+export function pillSvg(scale: number): string {
+  return svgOpen(PILL_W, PILL_H, scale, 13) + frost(PILL_W, PILL_H, 999) + '</svg>'
+}
+
+export function spacerSvg(width: number): string {
+  return svgOpen(width, 1) + '</svg>'
 }
 
 /** About how wide `s` draws at 10px in the system font, a little generous so text never collides. */
@@ -272,25 +330,56 @@ export function textWidth(s: string): number {
   return w * 1.05
 }
 
-const LINE_GAP = 14
+type CardLine = { text: string; secondary?: boolean; color?: string }
+type Card = { source: string; alt: string; width: number; height: number }
 
-/** Shown on hover, two short lines: limits and spend; then the machine and each context category beside its bar color. */
-export function detailSvg(a: BandInput): { source: string; alt: string; width: number; height: number } {
+/** Wrap at readable size rather than letting the host squeeze a long image. */
+function wrapLine(text: string, width: number, font: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word
+    if (line && textWidth(next) * font / 10 > width) {
+      lines.push(line)
+      line = ''
+    }
+    // A single long category name must fit too; do not silently clip it.
+    for (const char of (line ? ` ${word}` : word)) {
+      if (line && textWidth(line + char) * font / 10 > width) {
+        lines.push(line)
+        line = ''
+      }
+      line += char
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+function card(lines: CardLine[], scale: number, maxWidth: number, reserve = 0): Card {
+  const width = maxWidth / scale
+  const contentWidth = Math.max(1, width - PAD * 2 - 9)
   const parts: string[] = []
-  const words: string[] = []
-  const ends: number[] = []
-  let x = 0
-  let line = 0
-  const say = (s: string) => {
-    parts.push(`<text x="${x}" y="${10.5 + line * H}" fill="${FAINT}">${esc(s)}</text>`)
-    words.push(s)
-    x += textWidth(s) + LINE_GAP
+  let y = PAD
+  for (const line of lines) {
+    const font = line.secondary ? 13 : 14
+    wrapLine(line.text, contentWidth, font).forEach((text, i) => {
+      if (line.color && i === 0) parts.push(`<circle cx="${PAD + 3}" cy="${y + font / 2}" r="3" fill="${line.color}"/>`)
+      parts.push(`<text x="${PAD + (line.color ? 9 : 0)}" y="${y + font}" font-size="${font}" fill="${INK}">${esc(text)}</text>`)
+      y += font * 1.5
+    })
   }
-  const newLine = () => {
-    ends.push(x)
-    x = 0
-    line += 1
+  const height = y + PAD + reserve
+  return {
+    source: svgOpen(width, height, scale, 14) + frost(width, height) + parts.join('') + '</svg>',
+    alt: lines.map(l => l.text).join(', '), width: maxWidth, height: height * scale
   }
+}
+
+/** Same hover content and alt text, now wrapped at 14px / 13px with 1.5 line spacing. */
+export function detailSvg(a: BandInput, scale = 1, maxWidth = BAND_W * scale): Card {
+  const lines: CardLine[] = []
+  const say = (text: string, secondary = false, color?: string) => lines.push({ text, secondary, color })
 
   if (a.day?.resetsAt) say(`Day resets in ${untilReset(a.day.resetsAt, a.now)}`)
   if (a.week?.resetsAt) say(`Week resets in ${untilReset(a.week.resetsAt, a.now)}`)
@@ -302,28 +391,30 @@ export function detailSvg(a: BandInput): { source: string; alt: string; width: n
 
   const s = a.system
   const used = a.segments.filter(seg => seg.kind === 'used' && seg.tokens > 0)
-  if (s || used.length) newLine()
-  if (s?.cpu != null) say(`CPU ${Math.round(s.cpu)}% of ${s.cores} cores`)
-  if (s?.memory != null) say(`Memory ${Math.round(s.memory)}%${s.memoryGb ? ` of ${Math.round(s.memoryGb)} GB` : ''}`)
-  if (s?.disk) say(`Disk ${Math.round(s.disk.freeGb)} GB free`)
-  if (s?.battery) say(`Battery ${Math.round(s.battery.percent)}%, ${s.battery.state}`)
+  if (s?.cpu != null) say(`CPU ${Math.round(s.cpu)}% of ${s.cores} cores`, true)
+  if (s?.memory != null) say(`Memory ${Math.round(s.memory)}%${s.memoryGb ? ` of ${Math.round(s.memoryGb)} GB` : ''}`, true)
+  if (s?.disk) say(`Disk ${Math.round(s.disk.freeGb)} GB free`, true)
+  if (s?.battery) say(`Battery ${Math.round(s.battery.percent)}%, ${s.battery.state}`, true)
 
   const { legend } = contextCells(a.segments, BAR_W)
   used.forEach((seg, i) => {
-    parts.push(`<circle cx="${x + 3}" cy="${7 + line * H}" r="3" fill="${legend[i]?.color ?? INK}"/>`)
-    x += 9
-    say(`${seg.name} ${tokens(seg.tokens)}`)
+    say(`${seg.name} ${tokens(seg.tokens)}`, true, legend[i]?.color ?? INK)
   })
-  ends.push(x)
-
-  const width = Math.max(1, Math.ceil(Math.max(...ends) - LINE_GAP))
-  const height = (line + 1) * H
-  return { source: svgOpen(width, height) + parts.join('') + `</svg>`, alt: words.join(', '), width, height }
+  return card(lines, scale, maxWidth)
 }
 
-function svgOpen(width: number, height = H): string {
+/** Lane B can add action rows here; no probes or cleanup commands belong in this shell. */
+export function drawer(panel: Panel | null, sys: System | null, scale: number, maxWidth = 360 * scale): Card | null {
+  if (!panel || !sys) return null
+  const title = { cpu: 'CPU', mem: 'Memory', disk: 'Disk' }[panel]
+  const percent = panel === 'cpu' ? sys.cpu : panel === 'mem' ? sys.memory : sys.disk?.percent ?? null
+  const text = percent === null ? `${title} \u2013` : `${title} ${Math.round(percent)}% used`
+  return card([{ text: title }, { text, secondary: true }], scale, maxWidth, PILL_H)
+}
+
+function svgOpen(width: number, height = H, scale = 1, font = 14): string {
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" ` +
-    `font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="10" style="font-variant-numeric:tabular-nums">`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width * scale}" height="${height * scale}" viewBox="0 0 ${width} ${height}" ` +
+    `font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="${font}" style="font-variant-numeric:tabular-nums">`
   )
 }
