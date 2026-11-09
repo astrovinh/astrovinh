@@ -1,6 +1,6 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, RenderNode, RenderPropsOf } from 'claude-code'
-import { desktopLayout, pillHits, weekHover } from './bars'
+import { desktopLayout, weekHover } from './bars'
 
 const svgAlts = async (ui: any): Promise<string[]> => (await ui.findAll({ type: 'Svg' })).map((s: any) => String(s.props.alt))
 
@@ -170,8 +170,8 @@ test('only the pills show when even Day cannot fit at the minimum scale', async 
   })
   try {
     const svgs = await ui.findAll({ type: 'Svg' })
-    // The band picture holds only the pills, plus a gap and a sized cell per pill button.
-    expect(svgs).toHaveLength(7)
+    // Windows onto the pills-only picture, one either side of each percent button.
+    expect(svgs).toHaveLength(4)
     expect(String(svgs[0]!.props.source)).not.toContain('clipPath id="c0"')
     expect(String(svgs[0]!.props.source)).toContain('>M</text>')
   } finally {
@@ -186,19 +186,13 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
     try {
       const svgs = await ui.findAll({ type: 'Svg' })
       // A validation refusal must not masquerade as a zero-width successful render.
-      // One band picture with the pills in it, then a gap and a sized cell per press area (Week when it fits, and each pill).
+      // Windows onto one band picture with a native button in the row between each pair: W when Week fits, and each pill's percent.
       const layout = desktopLayout(columns)
-      const areas = 3 + (weekHover(layout) ? 1 : 0)
-      expect(svgs.length).toBe(1 + areas * 2)
-      // Press areas sit in ONE row, so each one starts exactly where the band places it and none covers another.
-      let x = 0
-      const starts: number[] = []
-      for (let i = 1; i < svgs.length; i += 2) {
-        x += Number(svgs[i]!.props.width)
-        starts.push(Math.round(x))
-        x += Number(svgs[i + 1]!.props.width)
-      }
-      expect(starts.slice(-3)).toEqual(pillHits(layout, { cpu: 1, cores: 1, memory: 1, memoryGb: 1, disk: { percent: 1, freeGb: 1 }, battery: null }).map(p => Math.round(p.left)))
+      const buttons = await ui.findAll({ type: 'Button' })
+      expect(buttons).toHaveLength(3 + (weekHover(layout) ? 1 : 0))
+      expect(svgs.length).toBe(buttons.length + 1)
+      // Nothing is laid over the pictures: an overlay never draws on the desktop.
+      expect(JSON.stringify(await ui.drawn())).not.toContain('"absolute"')
       // Below the pills' own width nothing fits; the pills still show at their smallest.
       for (const svg of svgs) {
         expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(Math.max(columns * 7 - 16, desktopLayout(1).width))

@@ -259,7 +259,7 @@ export function usd(n: number): string {
 }
 
 /** Day, Week and Ctx share one row; native pill buttons sit over its right side. */
-export function bandSvg(a: BandInput, columns?: number): { source: string; alt: string; width: number; height: number; layout: DesktopLayout } {
+export function bandSvg(a: BandInput, columns?: number): { source: string; alt: string; width: number; height: number; layout: DesktopLayout; inner: string } {
   const layout = desktopLayout(columns, a.spend !== null, a.system !== null)
   const { cells } = contextCells(a.segments, layout.barW)
   const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '\u2500' ? BUFFER : 'transparent') }))
@@ -277,15 +277,56 @@ export function bandSvg(a: BandInput, columns?: number): { source: string; alt: 
     ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null, layout.barW)
     // Week's letter is the native button laid over this spot (see weekHover), so the picture leaves it out.
     : limitGroup(i, panel === 'day' ? 'D' : '', panel === 'day' ? a.day : a.week, layout.barW)).join('')
-  const source =
-    svgOpen(baseWidth, BAND_H, layout.scale, 11) +
+  const inner =
     `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
     (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_FIXED + layout.barW + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
     (layout.system ? pillsMarkup(a.system, layout.pillsX) : '') +
-    `</g>` +
-    `</svg>`
+    `</g>`
+  const source = svgOpen(baseWidth, BAND_H, layout.scale, 11) + inner + `</svg>`
 
-  return { source: width ? source : '', alt, width, height, layout }
+  return { source: width ? source : '', alt, width, height, layout, inner }
+}
+
+export type BandPart =
+  | { kind: 'picture'; source: string; alt: string; width: number; height: number }
+  | { kind: 'button'; key: string; label: string; panel: Panel | 'week' }
+
+/**
+ * The band as it is drawn on the desktop: windows onto the one picture, with a native text button
+ * in each gap where the picture leaves its label out (W, and each readable pill's percent).
+ * Buttons laid OVER a picture are never drawn there, so every button sits in the row itself.
+ */
+export function bandParts(band: ReturnType<typeof bandSvg>, sys: System | null): BandPart[] {
+  const { layout, inner, alt } = band
+  if (!band.width) return []
+  const base = band.width / layout.scale
+  const week = layout.panels.indexOf('week')
+  const slots: { x: number; label: string; key: string; panel: Panel | 'week' }[] = [
+    ...(week < 0 ? [] : [{ x: PAD + week * (GROUP_FIXED + layout.barW + GROUP_GAP), label: 'W', key: 'usage-week', panel: 'week' as const }]),
+    ...(!layout.system ? [] : systemPills(sys).flatMap((p, i) => p.enabled
+      ? [{ x: PAD + layout.pillsX + i * (PILL_W + PILL_GAP) + PILL_TEXT, label: p.value, key: `usage-${p.panel}`, panel: p.panel }]
+      : []))
+  ]
+  const parts: BandPart[] = []
+  let from = 0
+  const window = (to: number) => {
+    if (to - from < 0.5) return
+    parts.push({
+      kind: 'picture',
+      source: svgOpen(to - from, BAND_H, layout.scale, 11).replace(/viewBox="0 0 /, `viewBox="${from} 0 `) + inner + '</svg>',
+      alt: parts.length ? '' : alt,
+      width: (to - from) * layout.scale,
+      height: BAND_H * layout.scale
+    })
+  }
+  for (const s of slots) {
+    window(s.x)
+    parts.push({ kind: 'button', key: s.key, label: s.label, panel: s.panel })
+    // The button's own text takes about the width the picture would have drawn.
+    from = s.x + textWidth(s.label) * 1.1
+  }
+  window(base)
+  return parts
 }
 
 type SysItem = { label: string; name: string; percent: number; kind: 'load' | 'battery' }
