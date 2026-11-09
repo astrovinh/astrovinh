@@ -155,8 +155,7 @@ const PAD = 12
 export const PILL_W = 84
 export const PILL_H = 28
 export const PILL_GAP = 6
-export const PILL_RING = 12
-export const PILL_RING_GAP = 5
+export const PILL_RING = 11
 const PILLS_W = PILL_W * 3 + PILL_GAP * 2
 
 export const BAND_W = PAD * 2 + GROUP_W * 3 + GROUP_GAP * 4 + COST_W + PILLS_W
@@ -312,14 +311,7 @@ export function systemPills(sys: System | null) {
   }))
 }
 
-/** The Button supplies the native focus ring and text; this SVG supplies its rounded skin. */
-export function pillSvg(scale: number): string {
-  return svgOpen(PILL_W, PILL_H, scale, 13) +
-    `<rect x="0.5" y="0.5" width="${PILL_W - 1}" height="${PILL_H - 1}" rx="${PILL_H / 2}" fill="none" stroke="${INK}" stroke-opacity="0.45"/>` +
-    '</svg>'
-}
-
-/** The severity ring at the start of a pill, filled to the reading; a null reading draws only the track. */
+/** The severity ring beside a pill's label, filled to the reading; a null reading draws only the track. */
 export function pillRingSvg(percent: number | null, color: string): string {
   return svgOpen(PILL_RING, PILL_RING) + ring(PILL_RING / 2, PILL_RING / 2, 4.5, percent ?? 0, color, TRACK) + '</svg>'
 }

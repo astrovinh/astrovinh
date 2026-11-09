@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, contextCells, detailSvg, drawer, limitCells, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
+import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_RING, pillRingSvg, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
 import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -117,13 +117,16 @@ export const register: Register = on => {
       const detail = detailSvg(input, scale, hover ? band.width - hover.left : band.width)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
       const pills = systemPills(sys).map(pill => (
-        <Box key={`pill-${pill.panel}`} marginRight={2}>
-          {pill.enabled ? (
-            <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
-              onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
-              <Text tabular color={pill.color}>{`\u25cf ${pill.label} ${pill.value}`}</Text>
-            </Button>
-          ) : <Text tabular>{`${pill.label} ${pill.value}`}</Text>}
+        <Box key={`pill-${pill.panel}`} flexDirection="row" alignItems="center" marginRight={2} borderStyle="round" paddingX={1}>
+          <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING * scale} height={PILL_RING * scale} />
+          <Box marginLeft={1}>
+            {pill.enabled ? (
+              <Button key={`usage-${pill.panel}`} plain
+                onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
+                <Text tabular>{`${pill.label} ${pill.value}`}</Text>
+              </Button>
+            ) : <Text tabular>{`${pill.label} ${pill.value}`}</Text>}
+          </Box>
         </Box>
       ))
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
@@ -148,8 +151,6 @@ export const register: Register = on => {
               {pills}
             </Box>
           )}
-          {/* TEMP DEBUG: remove once the pills are confirmed */}
-          <Text size="caption">{`debug v4 cols=${e.viewport?.columns} sys=${sys === null ? 'null' : 'ok'} layoutSystem=${band.layout.system} below=${band.layout.pillsBelow} panels=${band.layout.panels.length} pills=${pills.length}`}</Text>
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
               <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
