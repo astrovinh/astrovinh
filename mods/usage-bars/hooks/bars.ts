@@ -158,6 +158,8 @@ export const PILL_H = 28
 const PILL_W = 50
 const PILL_GAP = 10
 const PILL_R = 7
+/** Where a pill's percent starts, after its ring. */
+const PILL_TEXT = PILL_R * 2 + 6
 /** The three pills drawn at the band's right end, after one group gap. */
 const PILLS_W = GROUP_GAP + PILL_W * 3 + PILL_GAP * 2
 
@@ -273,7 +275,8 @@ export function bandSvg(a: BandInput, columns?: number): { source: string; alt: 
   const baseWidth = width / layout.scale
   const groups = layout.panels.map((panel, i) => panel === 'ctx'
     ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null, layout.barW)
-    : limitGroup(i, panel === 'day' ? 'D' : 'W', panel === 'day' ? a.day : a.week, layout.barW)).join('')
+    // Week's letter is the native button laid over this spot (see weekHover), so the picture leaves it out.
+    : limitGroup(i, panel === 'day' ? 'D' : '', panel === 'day' ? a.day : a.week, layout.barW)).join('')
   const source =
     svgOpen(baseWidth, BAND_H, layout.scale, 11) +
     `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
@@ -323,15 +326,16 @@ function pillsMarkup(sys: System | null, x0: number): string {
     return (
       ring(x + PILL_R + 1, cy, PILL_R, p.percent ?? 0, p.color, TRACK) +
       `<text x="${x + PILL_R + 1}" y="${cy + 3.5}" text-anchor="middle" font-size="9" fill="${INK}">${p.label}</text>` +
-      `<text x="${x + PILL_R * 2 + 6}" y="10.5" fill="${p.percent === null ? FAINT : INK}">${p.value}</text>`
+      // A pressable pill's percent is the native button laid over this spot (see pillHits); only a missing reading is drawn here.
+      (p.enabled ? '' : `<text x="${x + PILL_TEXT}" y="10.5" fill="${FAINT}">${p.value}</text>`)
     )
   }).join('')
 }
 
 /** Where each pressable pill sits in the band, in CSS px, for the invisible buttons laid over it. */
-export function pillHits(layout: DesktopLayout, sys: System | null): { panel: Panel; left: number; width: number }[] {
+export function pillHits(layout: DesktopLayout, sys: System | null): { panel: Panel; left: number; width: number; label: string }[] {
   if (!layout.system) return []
-  return systemPills(sys).flatMap((p, i) => p.enabled ? [{ panel: p.panel, left: (PAD + layout.pillsX + i * (PILL_W + PILL_GAP)) * layout.scale, width: PILL_W * layout.scale }] : [])
+  return systemPills(sys).flatMap((p, i) => p.enabled ? [{ panel: p.panel, left: (PAD + layout.pillsX + i * (PILL_W + PILL_GAP) + PILL_TEXT) * layout.scale, width: (PILL_W - PILL_TEXT) * layout.scale, label: p.value }] : [])
 }
 
 export function spacerSvg(width: number, height = 1): string {

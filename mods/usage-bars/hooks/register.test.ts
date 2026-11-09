@@ -213,6 +213,8 @@ test('desktop pills open, switch, toggle and close the plain drawer through the 
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
     expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['usage-week', 'usage-cpu', 'usage-mem', 'usage-disk'])
+    // Every press area shows text: whitespace-only buttons never answered a press on the desktop.
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim())).toEqual(['W', '18%', '71%', '83%'])
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.

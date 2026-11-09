@@ -135,12 +135,12 @@ export const register: Register = on => {
       const detail = detailSvg(input, scale, band.width)
       const weekShown = await read($, weekOpen)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
-      // Invisible buttons laid over the band picture in ONE row: a separate overlay per button
-      // would put each one's left spacer on top of the buttons before it and swallow their clicks.
+      // Text buttons laid over the band picture in ONE row, each showing the label the picture leaves
+      // out at that spot ("W", "22%"). Whitespace-only buttons never answered a press on the desktop.
       // Each button sits inside a box sized by a picture of its exact pixel width.
-      const hits: { key: string; left: number; width: number; onPress: () => Promise<void> }[] = [
-        ...(hover ? [{ key: 'usage-week', left: hover.left, width: hover.width, onPress: async () => { await update($, weekOpen, open => !open) } }] : []),
-        ...pillHits(band.layout, sys).map(pill => ({ key: `usage-${pill.panel}`, left: pill.left, width: pill.width, onPress: async () => {
+      const hits: { key: string; left: number; width: number; label: string; onPress: () => Promise<void> }[] = [
+        ...(hover ? [{ key: 'usage-week', left: hover.left, width: hover.width, label: 'W', onPress: async () => { await update($, weekOpen, open => !open) } }] : []),
+        ...pillHits(band.layout, sys).map(pill => ({ key: `usage-${pill.panel}`, left: pill.left, width: pill.width, label: pill.label, onPress: async () => {
           if (await read($, openPanel) === pill.panel) await closeDrawer($)
           else {
             await update($, openPanel, () => pill.panel)
@@ -156,9 +156,9 @@ export const register: Register = on => {
           <Svg key={`${area.key}-gap`} source={spacerSvg(gap)} alt="" width={gap} height={1} />,
           <Box key={`${area.key}-hit`} flexShrink={0}>
             <Svg source={spacerSvg(area.width, band.height)} alt="" width={area.width} height={band.height} />
-            <Box position="absolute" top={0} left={0} width="100%" height="100%" alignItems="center" justifyContent="center">
+            <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" alignItems="center">
               <Button key={area.key} plain onPress={area.onPress}>
-                <Text>{'\u00a0'.repeat(Math.max(1, Math.floor(area.width / 7)))}</Text>
+                <Text dimColor tabular>{area.label}</Text>
               </Button>
             </Box>
           </Box>
