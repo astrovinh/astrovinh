@@ -176,10 +176,8 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
     try {
       const svgs = await ui.findAll({ type: 'Svg' })
       // A validation refusal must not masquerade as a zero-width successful render.
-      // Band, plus the Week hover (two spacers and the detail card) when Week fits, plus each pill's
-      // background, ring and ring gap and the pill gaps. From 118 columns the pills share the band row,
-      // which adds the spacer before them; below that they sit on their own row.
-      expect(svgs.length).toBe(columns <= 12 ? 0 : columns < 49 ? 12 : columns >= 118 ? 16 : 15)
+      // Band, plus the Week hover (two spacers and the detail card) when Week fits. Pills are text, not SVG.
+      expect(svgs.length).toBe(columns <= 12 ? 0 : columns < 49 ? 1 : 4)
       for (const svg of svgs) {
         expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
       }
@@ -192,7 +190,7 @@ test('desktop pills open, switch, toggle and close the read-only drawer through 
   state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['CPU 18%', 'Mem 71%', 'Disk 83%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['\u25cf CPU 18%', '\u25cf Mem 71%', '\u25cf Disk 83%'])
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.
@@ -238,7 +236,7 @@ test('missing readings are unpressable and losing system data hides an open draw
   state.system = { cpu: null, cores: 8, memory: 71, memoryGb: 32, disk: null, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['Mem 71%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['\u25cf Mem 71%'])
     expect(await ui.find({ key: 'usage-cpu' })).toBe(undefined)
     expect(await ui.find({ type: 'Text', text: 'CPU \u2013' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })

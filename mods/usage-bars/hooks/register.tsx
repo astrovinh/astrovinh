@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_GAP, PILL_H, PILL_RING, PILL_RING_GAP, PILL_W, pillRingSvg, pillSvg, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
+import { bandSvg, contextCells, detailSvg, drawer, limitCells, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
 import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -116,35 +116,21 @@ export const register: Register = on => {
       const hover = weekHover(band.layout)
       const detail = detailSvg(input, scale, hover ? band.width - hover.left : band.width)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
-      const pills = systemPills(sys).map((pill, i) => (
-        <Box key={`pill-${pill.panel}`} flexDirection="row" gap={0} alignItems="center" flexShrink={0}>
-          <Box alignSelf="flex-start">
-            <Svg source={pillSvg(scale)} alt="" width={PILL_W * scale} height={PILL_H * scale} />
-            <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" alignItems="center" justifyContent="center">
-              <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING * scale} height={PILL_RING * scale} />
-              <Svg source={spacerSvg(PILL_RING_GAP * scale)} alt="" width={PILL_RING_GAP * scale} height={1} />
-              {pill.enabled ? (
-                <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
-                  onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
-                  <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>
-                </Button>
-              ) : <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>}
-            </Box>
-          </Box>
-          {i === 2 ? null : <Svg source={spacerSvg(PILL_GAP * scale)} alt="" width={PILL_GAP * scale} height={1} />}
+      const pills = systemPills(sys).map(pill => (
+        <Box key={`pill-${pill.panel}`} marginRight={2}>
+          {pill.enabled ? (
+            <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
+              onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
+              <Text tabular color={pill.color}>{`\u25cf ${pill.label} ${pill.value}`}</Text>
+            </Button>
+          ) : <Text tabular>{`${pill.label} ${pill.value}`}</Text>}
         </Box>
-        ))
+      ))
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
         <Box key="usage-bars" flexDirection="column" paddingX={1}>
           <Box alignSelf="flex-start" flexShrink={0}>
             <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} />
-            {!band.layout.system || band.layout.pillsBelow ? null : (
-              <Box position="absolute" top={0} left={0} height="100%" flexDirection="row" gap={0} alignItems="center">
-                <Svg source={spacerSvg(band.layout.pillStart)} alt="" width={band.layout.pillStart} height={1} />
-                {pills}
-              </Box>
-            )}
             {!hover ? null : (
               <Box key="usage-week-hover" position="absolute" top={0} left={0} flexDirection="row">
                 <Svg source={spacerSvg(hover.left)} alt="" width={hover.left} height={1} />
@@ -157,13 +143,13 @@ export const register: Register = on => {
               </Box>
             )}
           </Box>
-          {!band.layout.system || !band.layout.pillsBelow ? null : (
+          {!band.layout.system ? null : (
             <Box flexDirection="row" alignItems="center" alignSelf="flex-start" flexShrink={0}>
               {pills}
             </Box>
           )}
           {/* TEMP DEBUG: remove once the pills are confirmed */}
-          <Text size="caption">{`debug v3 cols=${e.viewport?.columns} sys=${sys === null ? 'null' : 'ok'} layoutSystem=${band.layout.system} below=${band.layout.pillsBelow} panels=${band.layout.panels.length} pills=${pills.length}`}</Text>
+          <Text size="caption">{`debug v4 cols=${e.viewport?.columns} sys=${sys === null ? 'null' : 'ok'} layoutSystem=${band.layout.system} below=${band.layout.pillsBelow} panels=${band.layout.panels.length} pills=${pills.length}`}</Text>
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
               <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
