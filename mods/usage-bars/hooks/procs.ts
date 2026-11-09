@@ -1,7 +1,9 @@
 import type { Proc, Group } from '../types'
 export type { Proc, Group } from '../types'
 export function protectedProcess(p: Proc, uid: number, tree: Set<number>): boolean {
-  return p.uid === 0 || p.uid !== uid || tree.has(p.pid) || /claude|codex|ssh|tailscaled|mosh|tmux|screen|kernel_task|launchd|windowserver|loginwindow|finder|dock|systemuiserver|terminal|iterm2|ghostty|alacritty|wezterm/i.test(p.command)
+  // Names are matched before the first --flag: Chromium helpers carry flags such as --screen-info.
+  const head = p.command.split(' --')[0]!
+  return p.uid === 0 || p.uid !== uid || tree.has(p.pid) || /claude|codex|ssh|tailscaled|mosh|tmux|screen|kernel_task|launchd|windowserver|loginwindow|finder|dock|systemuiserver|terminal|iterm2|ghostty|alacritty|wezterm/i.test(head)
 }
 export function ownTree(all: Proc[], pid: number): Set<number> {
   const tree = new Set([pid])
@@ -35,9 +37,9 @@ export function groups(all: Proc[], kind: 'cpu' | 'mem', uid: number, pid: numbe
   for (const p of all) {
     const bundle = /(?:^|\/)([^/]+)\.app(?:\/|$)/.exec(p.command)?.[1]
     const name = bundle ?? p.command.split(/\s/)[0]!.split('/').pop() ?? 'Process'
-    const group = map.get(name) ?? { id: String(p.pid), name, bytes: 0, cpu: 0, pids: [], processes: [], protected: false }
+    const group = map.get(name) ?? { id: String(p.pid), name, bytes: 0, cpu: 0, pids: [], processes: [], protected: true }
     group.bytes += p.rss; group.cpu += p.cpu; group.pids.push(p.pid); group.processes.push(p)
-    group.protected ||= protectedProcess(p, uid, tree)
+    group.protected &&= protectedProcess(p, uid, tree)
     map.set(name, group)
   }
   return [...map.values()].sort((a,b) => kind === 'mem' ? b.bytes - a.bytes : b.cpu - a.cpu).slice(0,6)

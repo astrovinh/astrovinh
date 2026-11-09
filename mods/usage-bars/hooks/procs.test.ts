@@ -31,3 +31,16 @@ test('S5 ps parser and top six groups keep app names, measured bytes and all PID
   expect(grouped[0]!.pids).toEqual([42,43])
   expect(groups([...all, ...Array.from({ length: 10 }, (_,i) => ({ ...p, pid: i + 100, command: `app${i}`, rss: i }))], 'cpu', 501, 999)).toHaveLength(6)
 })
+
+test('S6 names are matched before the first --flag, so Chromium flags never protect an app', () => {
+  const helper = '/Applications/Spotify.app/Contents/Frameworks/Spotify Helper (Renderer).app/Contents/MacOS/Spotify Helper (Renderer) --type=renderer --screen-info=1'
+  expect(protectedProcess({ ...p, command: helper }, 501, new Set())).toBe(false)
+  expect(protectedProcess({ ...p, command: '/System/Applications/Screen Sharing --type=x' }, 501, new Set())).toBe(true)
+})
+
+test('S6 an app group is protected only when every process in it is protected', () => {
+  const app = (pid: number, uid: number) => ({ ...p, pid, uid, command: '/Applications/Remote.app/Contents/MacOS/Remote' })
+  expect(groups([app(1, 501), app(2, 0)], 'mem', 501, 999)[0]!.protected).toBe(false)
+  expect(groups([app(1, 0), app(2, 0)], 'mem', 501, 999)[0]!.protected).toBe(true)
+})
+
