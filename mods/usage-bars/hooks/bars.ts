@@ -218,7 +218,8 @@ export function desktopLayout(columns: number | undefined, spend = true, system 
 }
 
 function widen(l: DesktopLayout, available: number): DesktopLayout {
-  if (!l.width) return l
+  // With only the pills left there is nothing to put the spare room after, so the pills stay their own width and centre.
+  if (!l.width || !l.panels.length) return l
   const width = Math.max(l.width, Math.min(available, MODULE_MAX_PX))
   return { ...l, width, pillsX: l.system ? width / l.scale - PAD * 2 - (PILLS_W - GROUP_GAP) : 0 }
 }

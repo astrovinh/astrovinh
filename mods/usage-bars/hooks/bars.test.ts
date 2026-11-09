@@ -244,7 +244,13 @@ test('the band keeps one text scale and widens to the session, centred room goin
     const layout = desktop.desktopLayout(columns)
     const available = columns * 7 - 16
     // As wide as the session allows, up to the cap, never narrower than its content.
-    if (available >= desktop.desktopLayout(1).width) expect(layout.width).toBe(Math.min(available, desktop.MODULE_MAX_PX))
+    if (layout.panels.length) {
+      expect(layout.width).toBe(Math.min(available, desktop.MODULE_MAX_PX))
+    } else {
+      // Pills alone keep their own width, so the centred band has even room on both sides.
+      expect(layout.width).toBe(desktop.desktopLayout(1).width)
+      expect(layout.pillsX).toBe(0)
+    }
     // The pills end one pad short of the right edge.
     expect(Math.round((12 + layout.pillsX + 170 + 12) * layout.scale)).toBe(Math.round(layout.width))
   }
