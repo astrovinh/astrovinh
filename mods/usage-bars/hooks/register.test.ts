@@ -1,5 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, RenderNode, RenderPropsOf } from 'claude-code'
+import { desktopLayout, weekHover } from './bars'
+
+const svgAlts = async (ui: any): Promise<string[]> => (await ui.findAll({ type: 'Svg' })).map((s: any) => String(s.props.alt))
 
 const props: RenderPropsOf['AbovePrompt'] = {
   hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120,
@@ -167,8 +170,10 @@ test('only the pills show when even Day cannot fit at the minimum scale', async 
   })
   try {
     const svgs = await ui.findAll({ type: 'Svg' })
-    expect(svgs).toHaveLength(3)
-    expect(svgs.some(s => String(s.props.alt).startsWith('Day'))).toBe(false)
+    // The band picture holds only the pills, plus one spacer per pill button.
+    expect(svgs).toHaveLength(4)
+    expect(String(svgs[0]!.props.source)).not.toContain('clipPath id="c0"')
+    expect(String(svgs[0]!.props.source)).toContain('>M</text>')
   } finally {
     await ui.unmount()
   }
@@ -181,10 +186,12 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
     try {
       const svgs = await ui.findAll({ type: 'Svg' })
       // A validation refusal must not masquerade as a zero-width successful render.
-      // Three pill rings always; the band from 46 columns, with the Week press area (one spacer) from 59.
-      expect(svgs.length).toBe(columns < 46 ? 3 : columns < 59 ? 4 : 5)
-      for (const svg of svgs.filter(s => Number(s.props.width) > 10)) {
-        expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
+      // One band picture with the pills in it, a spacer per pill button, and one more for Week when it fits.
+      const layout = desktopLayout(columns)
+      expect(svgs.length).toBe(1 + 3 + (weekHover(layout) ? 1 : 0))
+      // Below the pills' own width nothing fits; the pills still show at their smallest.
+      for (const svg of svgs) {
+        expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(Math.max(columns * 7 - 16, desktopLayout(1).width))
       }
     } finally { await ui.unmount() }
   })
@@ -195,11 +202,11 @@ test('desktop pills open, switch, toggle and close the plain drawer through the 
   state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim()).filter(Boolean)).toEqual(['C 18%', 'M 71%', 'D 83%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['usage-week', 'usage-cpu', 'usage-mem', 'usage-disk'])
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.
-    expect(await ui.find({ type: 'Text', text: '71% used' })).not.toBe(undefined)
+    expect((await svgAlts(ui)).find(a => /^(CPU|Memory|Disk) /.test(a))).toBe('Memory 71% used \u00b7 23 of 32 GB')
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe(null)
     await ui.redraw()
@@ -209,7 +216,7 @@ test('desktop pills open, switch, toggle and close the plain drawer through the 
     await ui.press({ key: 'usage-disk' })
     expect(state.panel).toBe('disk')
     await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: '83% used, 170 GB free' })).not.toBe(undefined)
+    expect((await svgAlts(ui)).find(a => /^(CPU|Memory|Disk) /.test(a))).toBe('Disk 83% used \u00b7 170 GB free')
     await ui.press({ key: 'usage-close' })
     expect(state.panel).toBe(null)
     await ui.redraw()
@@ -241,16 +248,16 @@ test('missing readings are unpressable and losing system data hides an open draw
   state.system = { cpu: null, cores: 8, memory: 71, memoryGb: 32, disk: null, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim()).filter(Boolean)).toEqual(['M 71%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['usage-week', 'usage-mem'])
     expect(await ui.find({ key: 'usage-cpu' })).toBe(undefined)
-    expect(await ui.find({ type: 'Text', text: 'C \u2013' })).not.toBe(undefined)
+    expect(String((await ui.findAll({ type: 'Svg' }))[0]!.props.alt)).not.toContain('CPU')
     await ui.press({ key: 'usage-mem' })
     await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: '71% used' })).not.toBe(undefined)
+    expect((await svgAlts(ui)).find(a => /^(CPU|Memory|Disk) /.test(a))).toBe('Memory 71% used \u00b7 23 of 32 GB')
     state.system = null
     await ui.redraw()
-    expect((await ui.findAll({ type: 'Button' })).filter(b => b.text.trim())).toHaveLength(0)
-    expect(await ui.find({ type: 'Text', text: '71% used' })).toBe(undefined)
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['usage-week'])
+    expect((await svgAlts(ui)).some(a => a.startsWith('Memory '))).toBe(false)
   } finally { await ui.unmount() }
 })
 
@@ -344,8 +351,8 @@ test('S3/S4 worktree and simulator sections start unticked and each requires its
   const ui = await mountCleanup($)
   try {
     await ui.press({ key: 'usage-disk' }); await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: 'OLD WORKTREES' })).not.toBe(undefined)
-    expect(await ui.find({ type: 'Text', text: 'OLD SIMULATORS' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'Old worktrees' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'Old simulators' })).not.toBe(undefined)
     expect(await ui.find({ key: 'usage-remove-worktree' })).toBe(undefined)
     expect(await ui.find({ key: 'usage-remove-sim' })).toBe(undefined)
     expect(await ui.findAll({ type: 'Button', text: /^\u25cb/ })).toHaveLength(2)
@@ -414,7 +421,7 @@ test('non-macOS drawers keep readings and never scan or offer actions', async ($
   const ui = await mountCleanup($)
   try {
     await ui.press({ key: 'usage-cpu' }); await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: '100% busy' })).not.toBe(undefined)
+    expect((await svgAlts(ui)).find(a => /^(CPU|Memory|Disk) /.test(a))).toContain('100% busy')
     expect(h.calls).toEqual([['uname', '-s']])
     expect(await ui.find({ key: 'usage-refresh' })).toBe(undefined)
   } finally { await ui.unmount() }

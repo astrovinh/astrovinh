@@ -154,17 +154,20 @@ const BUFFER = 'rgba(139,139,139,0.38)'
 const COST_W = 48
 const PAD = 12
 export const PILL_H = 28
-export const PILL_RING = 10
-/** The three text pills beside the band, worst case, in CSS px: ring, gap and "C 100%". They do not scale with the band. */
-const PILLS_PX = 190
+/** One pill: a ring around its letter, then the percent, in band units. */
+const PILL_W = 50
+const PILL_GAP = 10
+const PILL_R = 7
+/** The three pills drawn at the band's right end, after one group gap. */
+const PILLS_W = GROUP_GAP + PILL_W * 3 + PILL_GAP * 2
 
 export const BAND_W = PAD * 2 + (GROUP_FIXED + BAR_MAX) * 3 + GROUP_GAP * 4 + COST_W
 export const BAND_H = 42
 
 /** The host measures panes in code-font cells; SVGs draw in CSS pixels. */
 export function bandScale(columns: number | undefined): number {
-  const available = columns === undefined ? BAND_W + PILLS_PX : columns * 7 - 16
-  return Math.max(1.15, Math.min(1.6, (available - PILLS_PX) / BAND_W))
+  const available = columns === undefined ? BAND_W + PILLS_W : columns * 7 - 16
+  return Math.max(1.15, Math.min(1.6, available / (BAND_W + PILLS_W)))
 }
 
 type DesktopLayout = {
@@ -174,13 +177,16 @@ type DesktopLayout = {
   barW: number
   scale: number
   width: number
+  /** Where the pills start, in band units. */
+  pillsX: number
 }
 
-/** One line at any width: the bars shrink first, then dollars, then panels go, never the pills. */
+/** One line at any width: the bars shrink first, then dollars, then panels go, never the pills (drawn in the same image). */
 export function desktopLayout(columns: number | undefined, spend = true, system = true): DesktopLayout {
   const scale = bandScale(columns)
   const available = columns === undefined ? Infinity : columns * 7 - 16
-  const budget = (available - (system ? PILLS_PX : 0)) / scale
+  const pills = system ? PILLS_W : 0
+  const budget = available / scale - pills
   const all = ['day', 'week', 'ctx'] as DesktopLayout['panels']
   const candidates = [
     { panels: all, spend },
@@ -192,9 +198,9 @@ export function desktopLayout(columns: number | undefined, spend = true, system 
     const n = c.panels.length
     const fixed = PAD * 2 + n * GROUP_FIXED + (n - 1) * GROUP_GAP + (c.spend ? GROUP_GAP + COST_W : 0)
     const barW = Math.min(BAR_MAX, Math.floor((budget - fixed) / n))
-    if (barW >= BAR_MIN) return { ...c, system, barW, scale, width: (fixed + n * barW) * scale }
+    if (barW >= BAR_MIN) return { ...c, system, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: fixed + n * barW - PAD * 2 + GROUP_GAP }
   }
-  return { panels: [], spend: false, system, barW: BAR_MIN, scale, width: 0 }
+  return { panels: [], spend: false, system, barW: BAR_MIN, scale, width: system ? (PAD * 2 + PILLS_W - GROUP_GAP) * scale : 0, pillsX: 0 }
 }
 
 export function esc(s: string): string {
@@ -272,6 +278,7 @@ export function bandSvg(a: BandInput, columns?: number): { source: string; alt: 
     svgOpen(baseWidth, BAND_H, layout.scale, 11) +
     `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
     (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_FIXED + layout.barW + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
+    (layout.system ? pillsMarkup(a.system, layout.pillsX) : '') +
     `</g>` +
     `</svg>`
 
@@ -308,9 +315,23 @@ export function systemPills(sys: System | null) {
   }))
 }
 
-/** The severity ring beside a pill's label, filled to the reading; a null reading draws only the track. */
-export function pillRingSvg(percent: number | null, color: string): string {
-  return svgOpen(PILL_RING, PILL_RING) + ring(PILL_RING / 2, PILL_RING / 2, 4.5, percent ?? 0, color, TRACK) + '</svg>'
+/** Each pill's letter inside a severity ring filled to the reading, then the percent; a null reading draws only the track. */
+function pillsMarkup(sys: System | null, x0: number): string {
+  return systemPills(sys).map((p, i) => {
+    const x = x0 + i * (PILL_W + PILL_GAP)
+    const cy = H / 2
+    return (
+      ring(x + PILL_R + 1, cy, PILL_R, p.percent ?? 0, p.color, TRACK) +
+      `<text x="${x + PILL_R + 1}" y="${cy + 3.5}" text-anchor="middle" font-size="9" fill="${INK}">${p.label}</text>` +
+      `<text x="${x + PILL_R * 2 + 6}" y="10.5" fill="${p.percent === null ? FAINT : INK}">${p.value}</text>`
+    )
+  }).join('')
+}
+
+/** Where each pressable pill sits in the band, in CSS px, for the invisible buttons laid over it. */
+export function pillHits(layout: DesktopLayout, sys: System | null): { panel: Panel; left: number; width: number }[] {
+  if (!layout.system) return []
+  return systemPills(sys).flatMap((p, i) => p.enabled ? [{ panel: p.panel, left: (PAD + layout.pillsX + i * (PILL_W + PILL_GAP)) * layout.scale, width: PILL_W * layout.scale }] : [])
 }
 
 export function spacerSvg(width: number, height = 1): string {

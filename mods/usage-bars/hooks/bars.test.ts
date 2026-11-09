@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import * as bars from './bars'
-import { allocate, bandSvg, contextCells, desktopLayout, detailSvg, layoutWidth, limitCells, pillRingSvg, terminalLayout, untilReset, usd, weekHover } from './bars'
+import { allocate, bandSvg, contextCells, desktopLayout, detailSvg, layoutWidth, limitCells, pillHits, terminalLayout, untilReset, usd, weekHover } from './bars'
 import type { TerminalLayout } from './bars'
 
 const full: TerminalLayout = { bar: 10, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
@@ -224,10 +224,10 @@ test("band shows the week's spend at the right, and leaves it out when unknown",
   expect(detailSvg({ segments: [], contextPercent: null, spend, system: null, now: 0 }).alt).toBe('Today $27.41')
 })
 
-test('band keeps its system alt text while pills replace the old rings', () => {
+test('band keeps its system alt text and draws the three pill rings itself', () => {
   const system = { cpu: 27, cores: 10, memory: 32, memoryGb: 34, disk: { percent: 77, freeGb: 224 }, battery: null }
   const b = bandSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
-  expect(b.source.includes('stroke-dasharray')).toBe(false)
+  expect(b.source.match(/stroke-dasharray/g)).toHaveLength(3)
   expect(b.source.includes('Bat')).toBe(false)
   expect(b.alt.endsWith(', CPU 27%, Memory 32%, Disk 77%')).toBe(true)
   const d = detailSvg({ segments: [], contextPercent: null, spend: null, system, now: 0 })
@@ -252,13 +252,14 @@ test('desktop scale clamps and is monotone over columns 1 through 300', () => {
   }
 })
 
-test('desktop drawn width fits every pane or draws nothing, without shrinking text', () => {
+test('desktop drawn width fits every pane, or is the pills alone at their smallest, without shrinking text', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
   for (let columns = 1; columns <= 300; columns++) {
     const layout = desktop.desktopLayout(columns)
     const band = bandSvg(input, columns)
     expect(layout.scale).toBeGreaterThanOrEqual(1.15)
-    expect(band.width === 0 || band.width <= columns * 7 - 16, `drawn width at ${columns} columns`).toBe(true)
+    expect(band.width <= Math.max(columns * 7 - 16, desktop.desktopLayout(1).width), `drawn width at ${columns} columns`).toBe(true)
+    expect(band.width).toBeGreaterThan(0)
     expect(band.width).toBe(layout.width)
   }
 })
@@ -266,14 +267,16 @@ test('desktop drawn width fits every pane or draws nothing, without shrinking te
 test('desktop fits one line: bars shrink first, then dollars, then panels, never the pills', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
   expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, barW: 56, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(98)).toMatchObject({ spend: true, system: true, barW: 42, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(78)).toMatchObject({ spend: false, system: true, barW: 22, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(60)).toMatchObject({ spend: false, system: true, panels: ['day', 'week'] })
+  expect(desktop.desktopLayout(98)).toMatchObject({ spend: true, system: true, barW: 35, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(78)).toMatchObject({ spend: false, system: true, barW: 15, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(70)).toMatchObject({ spend: false, system: true, panels: ['day', 'week'] })
   expect(desktop.desktopLayout(50)).toMatchObject({ spend: false, system: true, panels: ['day'] })
+  expect(desktop.desktopLayout(30)).toMatchObject({ system: true, panels: [] })
   for (let columns = 1; columns <= 300; columns++) {
     const layout = desktop.desktopLayout(columns)
     expect(layout.system).toBe(true)
-    if (layout.width) expect(layout.width + 190).toBeLessThanOrEqual(columns * 7 - 16)
+    // The pills are inside the band now, so the whole drawn width is the band's.
+    expect(layout.width).toBeLessThanOrEqual(Math.max(columns * 7 - 16, desktop.desktopLayout(1).width))
   }
 })
 
@@ -320,7 +323,13 @@ test('the hover area covers only the Week group', () => {
   expect(weekHover(desktopLayout(50))).toBe(null)
 })
 
-test('a pill ring takes its severity color and a null reading draws only the track', () => {
-  expect(pillRingSvg(18, '#9ece6a')).toContain('stroke="#9ece6a"')
-  expect(pillRingSvg(null, '#8b8b8b')).not.toContain('stroke-dasharray')
+test('the band draws each pill letter in a severity ring, and only pills with a reading are pressable', () => {
+  const band = bandSvg({ segments: [], contextPercent: null, spend: null, system: { ...sys, cpu: null }, now: 0 }, 160)
+  expect(band.source).toContain('>C</text>')
+  expect(band.source).toContain('stroke="#e0af68"')
+  expect(band.source.match(/stroke-dasharray/g)).toHaveLength(2)
+  const hits = pillHits(band.layout, { ...sys, cpu: null })
+  expect(hits.map(h => h.panel)).toEqual(['mem', 'disk'])
+  for (const h of hits) expect(h.left + h.width).toBeLessThanOrEqual(band.width)
+  expect(pillHits(desktopLayout(160, true, false), sys)).toEqual([])
 })

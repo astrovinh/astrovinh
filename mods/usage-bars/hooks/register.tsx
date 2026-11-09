@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_RING, pillRingSvg, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
+import { bandSvg, contextCells, detailSvg, drawer, limitCells, pillHits, spacerSvg, terminalLayout, usd, weekHover } from './bars'
 import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -129,51 +129,35 @@ export const register: Register = on => {
       const { Box, Svg, Button, Text } = $.ui.resolve(e)
       const input = { day, week, segments: segs, contextPercent: pct, spend: spent, system: sys, now }
       const band = bandSvg(input, e.viewport?.columns)
-      if (!band.width && !sys) return next(e)
+      if (!band.width) return next(e)
       const { scale } = band.layout
       const hover = weekHover(band.layout)
       const detail = detailSvg(input, scale, band.width)
       const weekShown = await read($, weekOpen)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
-      const pills = systemPills(sys).map(pill => (
-        <Box key={`pill-${pill.panel}`} flexDirection="row" alignItems="center" marginRight={1}>
-          <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING} height={PILL_RING} />
-          <Box marginLeft={1}>
-            {pill.enabled ? (
-              <Button key={`usage-${pill.panel}`} plain
-                onPress={async () => {
-                  if (await read($, openPanel) === pill.panel) await closeDrawer($)
-                  else {
-                    await update($, openPanel, () => pill.panel)
-                    await controls($).open(pill.panel)
-                  }
-                }}>
-                <Text tabular>{`${pill.label} ${pill.value}`}</Text>
-              </Button>
-            ) : <Text tabular>{`${pill.label} ${pill.value}`}</Text>}
-          </Box>
+      // Invisible buttons laid over the band picture, each placed from the left edge on its own.
+      const hit = (key: string, left: number, width: number, onPress: () => Promise<void>) => (
+        <Box key={`${key}-hit`} position="absolute" top={0} left={0} height="100%" flexDirection="row" alignItems="center">
+          <Svg source={spacerSvg(left)} alt="" width={left} height={1} />
+          <Button key={key} plain onPress={onPress}>
+            <Text>{'\u00a0'.repeat(Math.max(1, Math.round(width / 7)))}</Text>
+          </Button>
         </Box>
-      ))
+      )
+      const pills = pillHits(band.layout, sys).map(pill => hit(`usage-${pill.panel}`, pill.left, pill.width, async () => {
+        if (await read($, openPanel) === pill.panel) await closeDrawer($)
+        else {
+          await update($, openPanel, () => pill.panel)
+          await controls($).open(pill.panel)
+        }
+      }))
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
         <Box key="usage-bars" flexDirection="column" paddingX={1}>
-          <Box flexDirection="row" alignItems="center" alignSelf="flex-start" flexShrink={0}>
-            <Box flexShrink={0}>
-              {band.width ? <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} /> : null}
-              {!hover ? null : (
-                <Box key="usage-week-hit" position="absolute" top={0} left={0} height="100%" flexDirection="row" alignItems="center">
-                  <Svg source={spacerSvg(hover.left)} alt="" width={hover.left} height={1} />
-                  <Button key="usage-week" plain onPress={async () => { await update($, weekOpen, open => !open) }}>
-                    <Text>{'\u00a0'.repeat(Math.max(1, Math.round(hover.width / 7)))}</Text>
-                  </Button>
-                </Box>
-              )}
-            </Box>
-            {!band.layout.system ? null : (
-              <Box marginLeft={1} flexShrink={0}>
-                {pills}
-              </Box>
-            )}
+          <Box alignSelf="flex-start" flexShrink={0}>
+            <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} />
+            {!hover ? null : hit('usage-week', hover.left, hover.width, async () => { await update($, weekOpen, open => !open) })}
+            {pills}
           </Box>
           {!weekShown || !hover ? null : (
             <Box key="usage-week-detail" alignSelf="flex-start">
