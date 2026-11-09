@@ -7,7 +7,7 @@ import type { Gauge } from './gauge'
 const ON = '\u25cf'
 const OFF = '\u25cb'
 /** Text columns beside the pictures: Close and Quit at the right, the tick at the left. */
-const ACTION_W = 10
+const ACTION_W = 12
 const TICK_W = 3
 
 /** One share bar and a colour legend drawn as pictures, with native text buttons beside them; the host supplies the card. */

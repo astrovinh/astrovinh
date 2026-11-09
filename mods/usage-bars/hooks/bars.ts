@@ -313,7 +313,8 @@ export function bandParts(band: ReturnType<typeof bandSvg>, sys: System | null):
     if (to - from < 0.5) return
     parts.push({
       kind: 'picture',
-      source: svgOpen(to - from, BAND_H, layout.scale, 11).replace(/viewBox="0 0 /, `viewBox="${from} 0 `) + inner + '</svg>',
+      // Shift the drawing, not the viewBox: the desktop drops a picture whose viewBox starts anywhere but 0.
+      source: svgOpen(to - from, BAND_H, layout.scale, 11) + `<g transform="translate(${-from} 0)">${inner}</g>` + '</svg>',
       alt: parts.length ? '' : alt,
       width: (to - from) * layout.scale,
       height: BAND_H * layout.scale

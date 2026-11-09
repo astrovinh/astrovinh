@@ -333,3 +333,12 @@ test('the band draws each pill letter in a severity ring, and only pills with a 
   for (const h of hits) expect(h.left + h.width).toBeLessThanOrEqual(band.width)
   expect(pillHits(desktopLayout(160, true, false), sys)).toEqual([])
 })
+
+test('band windows shift the drawing and keep every viewBox at 0 0', () => {
+  const s = { cpu: 22, cores: 10, memory: 25, memoryGb: 32, disk: { percent: 64, freeGb: 62 }, battery: null }
+  const band = bandSvg({ day: { percentUsed: 10 }, week: { percentUsed: 66 }, segments: [], contextPercent: null, spend: null, system: s, now: 0 }, 150)
+  const pictures = bars.bandParts(band, s).filter(p => p.kind === 'picture') as { source: string }[]
+  expect(pictures.length).toBeGreaterThan(1)
+  for (const pic of pictures) expect(pic.source).toMatch(/viewBox="0 0 /)
+  expect(pictures.slice(1).every(pic => /translate\(-[\d.]+ 0\)/.test(pic.source))).toBe(true)
+})
