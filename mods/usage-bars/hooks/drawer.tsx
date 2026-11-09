@@ -11,9 +11,10 @@ const ACTION_W = 12
 const TICK_W = 3
 
 /** One share bar and a colour legend drawn as pictures, with native text buttons beside them; the host supplies the card. */
-export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, close: () => Promise<void>, columns?: number) {
+export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, close: () => Promise<void>, widthPx: number) {
   const { Box, Text, Button, Svg } = ui
-  const width = Math.min(60, Math.max(20, (columns ?? 62) - 2))
+  // The drawer takes the band's width, so both share one left and one right edge.
+  const width = Math.max(20, Math.floor(widthPx / CELL_PX))
   const px = (cells: number) => cells * CELL_PX
   const ready = view.phase === 'ready'
   const picked = (kind: Item['kind']) => view.items.filter(i => i.kind === kind && view.selected.includes(i.id) && i.eligible)
@@ -23,6 +24,7 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
   const cpu = view.panel === 'cpu'
   const listed = view.panel === 'disk' ? caches.map(i => share(i.bytes)) : view.groups.map(g => share(cpu ? g.cpu : g.bytes))
   const picture = (key: string, source: string, alt: string, cells: number, height: number) => <Svg key={key} source={source} alt={alt} width={px(cells)} height={height} />
+  const quiet = (text: string) => <Text size="footnote" dimColor>{text}</Text>
   const line = (text: string) => <Box marginTop={1}><Text size="body">{text}</Text></Box>
   const action = (key: string, label: string, onPress: () => void) => (
     <Box marginTop={1}><Button key={key} plain onPress={onPress}><Text size="body">{label}</Text></Button></Box>
@@ -55,7 +57,7 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
     <Box key="usage-drawer" flexDirection="column" width={width} marginTop={1}>
       <Box flexDirection="row" alignItems="flex-start">
         {picture('usage-share', shareSvg(gauge, ready ? listed : [], px(width - ACTION_W)), `${gauge.title} ${gauge.subtitle}`, width - ACTION_W, SHARE_H)}
-        <Box width={ACTION_W} alignItems="flex-end"><Button key="usage-close" plain onPress={close}><Text size="footnote">Close</Text></Button></Box>
+        <Box width={ACTION_W} alignItems="flex-end" paddingTop={1}><Button key="usage-close" plain onPress={close}>{quiet('Close')}</Button></Box>
       </Box>
       {!view.message ? null : line(view.message)}
       {view.phase === 'looking' ? <Box marginTop={1}><Text size="body" dimColor>Looking...</Text></Box> : null}
@@ -73,15 +75,15 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
           {!view.groups.length ? line('Nothing to clear right now.') : null}
           {view.groups.map((g, n) => (
             <Box key={`usage-group-${g.id}`} flexDirection="row" alignItems="center">
-              {picture(`usage-pic-${g.id}`, rowSvg(LEGEND[n % LEGEND.length]!, g.name, `${g.pids.length} ${g.pids.length === 1 ? 'process' : 'processes'}`, cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes), px(width - ACTION_W)), `${g.name} ${cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes)}`, width - ACTION_W, ROW_H)}
+              {picture(`usage-pic-${g.id}`, rowSvg(LEGEND[n % LEGEND.length]!, g.name, String(g.pids.length), cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes), px(width - ACTION_W)), `${g.name} ${cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes)}`, width - ACTION_W, ROW_H)}
               <Box width={ACTION_W} alignItems="flex-end">
-                {g.protected ? <Text size="footnote" dimColor>protected</Text> : (
-                  <Button key={`usage-quit-${g.id}`} plain onPress={() => actions.quit(g.id)}><Text size="body">{view.armed === `quit-${g.id}` ? 'Sure?' : 'Quit'}</Text></Button>
+                {g.protected ? quiet('protected') : (
+                  <Button key={`usage-quit-${g.id}`} plain onPress={() => actions.quit(g.id)}>{quiet(view.armed === `quit-${g.id}` ? 'Sure?' : 'Quit')}</Button>
                 )}
               </Box>
             </Box>
           ))}
-          <Box marginTop={1}><Button key="usage-refresh" plain onPress={() => actions.refresh()}><Text size="footnote">Refresh</Text></Button></Box>
+          <Box marginTop={1}><Button key="usage-refresh" plain onPress={() => actions.refresh()}>{quiet('Refresh')}</Button></Box>
         </Box>
       )}
       {view.panel !== 'disk' || view.phase === 'readonly' ? null : <Box marginTop={1}><Text size="footnote" dimColor>Your projects, notes and git work are never listed.</Text></Box>}

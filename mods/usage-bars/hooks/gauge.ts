@@ -10,7 +10,7 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif"
 export const LEGEND = ['#7F77DD', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#BA7517']
 /** The host measures the drawer in code-font cells; pictures are drawn in CSS px. */
 export const CELL_PX = 7
-export const SHARE_H = 44
+export const SHARE_H = 56
 export const ROW_H = 22
 
 export type Gauge = { title: string; subtitle: string; percent: number | null; color: string; capacity: number }
@@ -41,7 +41,7 @@ function open(width: number, height: number): string {
  */
 export function shareSvg(g: Gauge, shares: number[], width: number): string {
   const w = Math.max(80, width)
-  const barY = 28
+  const barY = 40
   const used = Math.max(0, Math.min(1, (g.percent ?? 0) / 100))
   let x = 0
   const runs = shares.map((s, i) => {
@@ -53,8 +53,10 @@ export function shareSvg(g: Gauge, shares: number[], width: number): string {
   const rest = Math.max(0, Math.round(w * used) - x)
   return (
     open(w, SHARE_H) +
-    `<text x="0" y="14" font-size="13" font-weight="600" fill="${NAME}">${esc(g.title)}</text>` +
-    `<text x="${w}" y="14" font-size="11" text-anchor="end" fill="${INK}">${esc(g.subtitle)}</text>` +
+    // A hairline parts the drawer from the band above it.
+    `<rect width="${w}" height="0.5" fill="${TRACK}"/>` +
+    `<text x="0" y="28" font-size="13" font-weight="600" fill="${NAME}">${esc(g.title)}</text>` +
+    `<text x="${w}" y="28" font-size="12" text-anchor="end" fill="${INK}">${esc(g.subtitle)}</text>` +
     `<clipPath id="share"><rect y="${barY}" width="${w}" height="8" rx="4"/></clipPath>` +
     `<rect y="${barY}" width="${w}" height="8" rx="4" fill="${TRACK}"/>` +
     `<g clip-path="url(#share)">${runs}${rest ? `<rect x="${x}" y="${barY}" width="${rest}" height="8" fill="${OTHER}"/>` : ''}</g>` +

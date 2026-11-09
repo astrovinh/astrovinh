@@ -238,18 +238,18 @@ const desktop = bars
 const sys = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
 const input = { segments: [], contextPercent: null, spend: { week: 1, today: 1, sessionsToday: 1, session: 1 }, system: sys, now: 0 }
 
-test('desktop scale clamps and is monotone over columns 1 through 300', () => {
-  expect(typeof desktop.bandScale).toBe('function')
-  expect(desktop.bandScale(undefined)).toBe(1.15)
-  expect(desktop.bandScale(1)).toBe(1.15)
-  expect(desktop.bandScale(300)).toBe(1.6)
-  let previous = 1.15
+test('the band keeps one text scale and widens to the session, centred room going before the pills', () => {
   for (let columns = 1; columns <= 300; columns++) {
-    const scale = desktop.bandScale(columns)
-    expect(scale).toBeGreaterThanOrEqual(previous)
-    expect(scale).toBeLessThanOrEqual(1.6)
-    previous = scale
+    expect(desktop.bandScale(columns)).toBe(1.15)
+    const layout = desktop.desktopLayout(columns)
+    const available = columns * 7 - 16
+    // As wide as the session allows, up to the cap, never narrower than its content.
+    if (available >= desktop.desktopLayout(1).width) expect(layout.width).toBe(Math.min(available, desktop.MODULE_MAX_PX))
+    // The pills end one pad short of the right edge.
+    expect(Math.round((12 + layout.pillsX + 170 + 12) * layout.scale)).toBe(Math.round(layout.width))
   }
+  expect(desktop.desktopLayout(300).width).toBe(desktop.MODULE_MAX_PX)
+  expect(desktop.desktopLayout(100).width).toBe(100 * 7 - 16)
 })
 
 test('desktop drawn width fits every pane, or is the pills alone at their smallest, without shrinking text', () => {

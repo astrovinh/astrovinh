@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandParts, bandSvg, contextCells, detailSvg, drawer, limitCells, terminalLayout, usd, weekHover } from './bars'
+import { bandInset, bandParts, bandSvg, contextCells, detailSvg, drawer, limitCells, terminalLayout, usd, weekHover } from './bars'
 import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -146,12 +146,12 @@ export const register: Register = on => {
         ? <Svg key={`usage-band-${i}`} source={part.source} alt={part.alt} width={part.width} height={part.height} />
         : (
           <Button key={part.key} plain onPress={async () => { await press(part.panel) }}>
-            <Text dimColor tabular>{part.label}</Text>
+            <Text size="footnote" dimColor tabular>{part.label}</Text>
           </Button>
         ))
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
-        <Box key="usage-bars" flexDirection="column" alignItems="center" paddingX={1}>
+        <Box key="usage-bars" flexDirection="column" alignItems="center">
           <Box flexDirection="row" alignItems="center" flexShrink={0}>
             {row}
           </Box>
@@ -160,7 +160,7 @@ export const register: Register = on => {
               <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
             </Box>
           )}
-          {!opened ? null : drawerView({ Box, Text, Button, Svg }, gaugeFor((await read($, openPanel))!, sys!), await read($, cleanupView) ?? initialView(), controls($), () => closeDrawer($), e.viewport?.columns)}
+          {!opened ? null : drawerView({ Box, Text, Button, Svg }, gaugeFor((await read($, openPanel))!, sys!), await read($, cleanupView) ?? initialView(), controls($), () => closeDrawer($), band.width - 2 * bandInset(band.layout))}
         </Box>
       )
     }

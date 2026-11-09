@@ -166,10 +166,18 @@ const PILLS_W = GROUP_GAP + PILL_W * 3 + PILL_GAP * 2
 export const BAND_W = PAD * 2 + (GROUP_FIXED + BAR_MAX) * 3 + GROUP_GAP * 4 + COST_W
 export const BAND_H = 42
 
-/** The host measures panes in code-font cells; SVGs draw in CSS pixels. */
-export function bandScale(columns: number | undefined): number {
-  const available = columns === undefined ? BAND_W + PILLS_W : columns * 7 - 16
-  return Math.max(1.15, Math.min(1.6, available / (BAND_W + PILLS_W)))
+/** One text size everywhere: 11 band units at this scale is about the host's small native text. */
+export const BAND_SCALE = 1.15
+/** The widest the module grows on a wide session, in CSS px; it stays centred. */
+export const MODULE_MAX_PX = 820
+/** The band's own side padding in CSS px; the drawer is inset by it so both share the same text edges. */
+export function bandInset(layout: { scale: number }): number {
+  return PAD * layout.scale
+}
+
+/** Kept for callers that size cards with the band; the band no longer grows its text with the pane. */
+export function bandScale(_columns: number | undefined): number {
+  return BAND_SCALE
 }
 
 type DesktopLayout = {
@@ -183,7 +191,11 @@ type DesktopLayout = {
   pillsX: number
 }
 
-/** One line at any width: the bars shrink first, then dollars, then panels go, never the pills (drawn in the same image). */
+/**
+ * One line at any width: the bars shrink first, then dollars, then panels go, never the pills.
+ * The band then widens to the session (up to MODULE_MAX_PX), with the spare room before the pills,
+ * so the pills sit at the right edge and the drawer below can share the same width.
+ */
 export function desktopLayout(columns: number | undefined, spend = true, system = true): DesktopLayout {
   const scale = bandScale(columns)
   const available = columns === undefined ? Infinity : columns * 7 - 16
@@ -200,9 +212,15 @@ export function desktopLayout(columns: number | undefined, spend = true, system 
     const n = c.panels.length
     const fixed = PAD * 2 + n * GROUP_FIXED + (n - 1) * GROUP_GAP + (c.spend ? GROUP_GAP + COST_W : 0)
     const barW = Math.min(BAR_MAX, Math.floor((budget - fixed) / n))
-    if (barW >= BAR_MIN) return { ...c, system, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: fixed + n * barW - PAD * 2 + GROUP_GAP }
+    if (barW >= BAR_MIN) return widen({ ...c, system, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: 0 }, available)
   }
-  return { panels: [], spend: false, system, barW: BAR_MIN, scale, width: system ? (PAD * 2 + PILLS_W - GROUP_GAP) * scale : 0, pillsX: 0 }
+  return widen({ panels: [], spend: false, system, barW: BAR_MIN, scale, width: system ? (PAD * 2 + PILLS_W - GROUP_GAP) * scale : 0, pillsX: 0 }, available)
+}
+
+function widen(l: DesktopLayout, available: number): DesktopLayout {
+  if (!l.width) return l
+  const width = Math.max(l.width, Math.min(available, MODULE_MAX_PX))
+  return { ...l, width, pillsX: l.system ? width / l.scale - PAD * 2 - (PILLS_W - GROUP_GAP) : 0 }
 }
 
 export function esc(s: string): string {
