@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_GAP, PILL_H, PILL_W, pillSvg, spacerSvg, systemPills, terminalLayout, usd } from './bars'
+import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_GAP, PILL_H, PILL_W, pillSvg, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
 import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -113,7 +113,8 @@ export const register: Register = on => {
       const band = bandSvg(input, e.viewport?.columns)
       if (!band.width) return next(e)
       const { scale } = band.layout
-      const detail = detailSvg(input, scale, band.width)
+      const hover = weekHover(band.layout)
+      const detail = detailSvg(input, scale, hover ? band.width - hover.left : band.width)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
@@ -141,9 +142,17 @@ export const register: Register = on => {
                 ))}
               </Box>
             )}
-          </Box>
-          <Box display="none" hover={{ display: 'flex' }}>
-            <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
+            {!hover ? null : (
+              <Box key="usage-week-hover" position="absolute" top={0} left={0} flexDirection="row">
+                <Svg source={spacerSvg(hover.left)} alt="" width={hover.left} height={1} />
+                <Box flexDirection="column">
+                  <Svg source={spacerSvg(hover.width, hover.height)} alt="" width={hover.width} height={hover.height} />
+                  <Box display="none" hover={{ display: 'flex' }}>
+                    <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
+                  </Box>
+                </Box>
+              </Box>
+            )}
           </Box>
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">

@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import * as bars from './bars'
-import { allocate, bandSvg, contextCells, detailSvg, layoutWidth, limitCells, terminalLayout, untilReset, usd } from './bars'
+import { allocate, bandSvg, contextCells, desktopLayout, detailSvg, layoutWidth, limitCells, terminalLayout, untilReset, usd, weekHover } from './bars'
 import type { TerminalLayout } from './bars'
 
 const full: TerminalLayout = { bar: 10, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
@@ -304,4 +304,12 @@ test('drawer uses existing readings only and disappears without a panel or syste
   expect(desktop.drawer('disk', sys, 1.15)?.alt).toBe('Disk, Disk 83% used')
   expect(desktop.drawer(null, sys, 1.15)).toBe(null)
   expect(desktop.drawer('mem', null, 1.15)).toBe(null)
+})
+
+test('the hover area covers only the Week group', () => {
+  const layout = desktopLayout(160)
+  const hover = weekHover(layout)!
+  expect(Math.round(hover.left)).toBe(Math.round((12 + 123 + 14) * layout.scale))
+  expect(Math.round(hover.width)).toBe(Math.round(123 * layout.scale))
+  expect(weekHover(desktopLayout(40))).toBe(null)
 })

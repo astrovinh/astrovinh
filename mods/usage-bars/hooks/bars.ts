@@ -312,8 +312,15 @@ export function pillSvg(scale: number): string {
   return svgOpen(PILL_W, PILL_H, scale, 13) + '</svg>'
 }
 
-export function spacerSvg(width: number): string {
-  return svgOpen(width, 1) + '</svg>'
+export function spacerSvg(width: number, height = 1): string {
+  return svgOpen(width, height) + '</svg>'
+}
+
+/** Where the Week group sits in the band, in pixels, so the hover can be aimed at it alone. */
+export function weekHover(layout: DesktopLayout): { left: number; width: number; height: number } | null {
+  const i = layout.panels.indexOf('week')
+  if (i < 0) return null
+  return { left: (PAD + i * (GROUP_W + GROUP_GAP)) * layout.scale, width: GROUP_W * layout.scale, height: BAND_H * layout.scale }
 }
 
 /** About how wide `s` draws at 10px in the system font, a little generous so text never collides. */
