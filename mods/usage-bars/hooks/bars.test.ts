@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import * as bars from './bars'
-import { allocate, bandSvg, contextCells, desktopLayout, detailSvg, layoutWidth, limitCells, terminalLayout, untilReset, usd, weekHover } from './bars'
+import { allocate, bandSvg, contextCells, desktopLayout, detailSvg, layoutWidth, limitCells, pillRingSvg, terminalLayout, untilReset, usd, weekHover } from './bars'
 import type { TerminalLayout } from './bars'
 
 const full: TerminalLayout = { bar: 10, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
@@ -312,4 +312,9 @@ test('the hover area covers only the Week group', () => {
   expect(Math.round(hover.left)).toBe(Math.round((12 + 123 + 14) * layout.scale))
   expect(Math.round(hover.width)).toBe(Math.round(123 * layout.scale))
   expect(weekHover(desktopLayout(40))).toBe(null)
+})
+
+test('a pill ring takes its severity color and a null reading draws only the track', () => {
+  expect(pillRingSvg(18, '#9ece6a')).toContain('stroke="#9ece6a"')
+  expect(pillRingSvg(null, '#8b8b8b')).not.toContain('stroke-dasharray')
 })

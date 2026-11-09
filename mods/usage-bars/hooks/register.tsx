@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Limit, Segment, Spend, System } from '../types'
-import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_GAP, PILL_H, PILL_W, pillSvg, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
+import { bandSvg, contextCells, detailSvg, drawer, limitCells, PILL_GAP, PILL_H, PILL_RING, PILL_RING_GAP, PILL_W, pillRingSvg, pillSvg, spacerSvg, systemPills, terminalLayout, usd, weekHover } from './bars'
 import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
@@ -128,13 +128,15 @@ export const register: Register = on => {
                   <Box key={`pill-${pill.panel}`} flexDirection="row" gap={0} alignItems="center" flexShrink={0}>
                     <Box alignSelf="flex-start">
                       <Svg source={pillSvg(scale)} alt="" width={PILL_W * scale} height={PILL_H * scale} />
-                      <Box position="absolute" top={0} left={0} width="100%" height="100%" alignItems="center" justifyContent="center">
+                      <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" alignItems="center" justifyContent="center">
+                        <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING * scale} height={PILL_RING * scale} />
+                        <Svg source={spacerSvg(PILL_RING_GAP * scale)} alt="" width={PILL_RING_GAP * scale} height={1} />
                         {pill.enabled ? (
                           <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
                             onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
-                            <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular color={pill.color}>{`${pill.label} ${pill.value}`}</Text>
+                            <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>
                           </Button>
-                        ) : <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular color={pill.color}>{`${pill.label} ${pill.value}`}</Text>}
+                        ) : <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>}
                       </Box>
                     </Box>
                     {i === 2 ? null : <Svg source={spacerSvg(PILL_GAP * scale)} alt="" width={PILL_GAP * scale} height={1} />}

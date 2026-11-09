@@ -176,8 +176,9 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
     try {
       const svgs = await ui.findAll({ type: 'Svg' })
       // A validation refusal must not masquerade as a zero-width successful render.
-      // Band, plus the Week hover (two spacers and the detail card) when Week fits, plus the pills at 125 columns.
-      expect(svgs.length).toBe(columns <= 12 ? 0 : columns < 49 ? 1 : columns >= 125 ? 10 : 4)
+      // Band, plus the Week hover (two spacers and the detail card) when Week fits, plus each pill's
+      // background, ring and ring gap, the pill gaps and the spacer before the pills at 118 columns.
+      expect(svgs.length).toBe(columns <= 12 ? 0 : columns < 49 ? 1 : columns >= 118 ? 16 : 4)
       for (const svg of svgs) {
         expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
       }
