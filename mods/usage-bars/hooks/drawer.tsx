@@ -52,7 +52,7 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
     )
   }
   return (
-    <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start" width={width} marginTop={1}>
+    <Box key="usage-drawer" flexDirection="column" width={width} marginTop={1}>
       <Box flexDirection="row" alignItems="flex-start">
         {picture('usage-share', shareSvg(gauge, ready ? listed : [], px(width - ACTION_W)), `${gauge.title} ${gauge.subtitle}`, width - ACTION_W, SHARE_H)}
         <Box width={ACTION_W} alignItems="flex-end"><Button key="usage-close" plain onPress={close}><Text size="footnote">Close</Text></Button></Box>

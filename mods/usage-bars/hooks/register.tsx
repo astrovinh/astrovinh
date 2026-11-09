@@ -135,32 +135,46 @@ export const register: Register = on => {
       const detail = detailSvg(input, scale, band.width)
       const weekShown = await read($, weekOpen)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
-      // Invisible buttons laid over the band picture, each placed from the left edge on its own.
-      const hit = (key: string, left: number, width: number, onPress: () => Promise<void>) => (
-        <Box key={`${key}-hit`} position="absolute" top={0} left={0} height="100%" flexDirection="row" alignItems="center">
-          <Svg source={spacerSvg(left)} alt="" width={left} height={1} />
-          <Button key={key} plain onPress={onPress}>
-            <Text>{'\u00a0'.repeat(Math.max(1, Math.round(width / 7)))}</Text>
-          </Button>
-        </Box>
-      )
-      const pills = pillHits(band.layout, sys).map(pill => hit(`usage-${pill.panel}`, pill.left, pill.width, async () => {
-        if (await read($, openPanel) === pill.panel) await closeDrawer($)
-        else {
-          await update($, openPanel, () => pill.panel)
-          await controls($).open(pill.panel)
-        }
-      }))
+      // Invisible buttons laid over the band picture in ONE row: a separate overlay per button
+      // would put each one's left spacer on top of the buttons before it and swallow their clicks.
+      // Each button sits inside a box sized by a picture of its exact pixel width.
+      const hits: { key: string; left: number; width: number; onPress: () => Promise<void> }[] = [
+        ...(hover ? [{ key: 'usage-week', left: hover.left, width: hover.width, onPress: async () => { await update($, weekOpen, open => !open) } }] : []),
+        ...pillHits(band.layout, sys).map(pill => ({ key: `usage-${pill.panel}`, left: pill.left, width: pill.width, onPress: async () => {
+          if (await read($, openPanel) === pill.panel) await closeDrawer($)
+          else {
+            await update($, openPanel, () => pill.panel)
+            await controls($).open(pill.panel)
+          }
+        } }))
+      ]
+      let edge = 0
+      const overlay = hits.flatMap(area => {
+        const gap = Math.max(0, area.left - edge)
+        edge = area.left + area.width
+        return [
+          <Svg key={`${area.key}-gap`} source={spacerSvg(gap)} alt="" width={gap} height={1} />,
+          <Box key={`${area.key}-hit`} flexShrink={0}>
+            <Svg source={spacerSvg(area.width, band.height)} alt="" width={area.width} height={band.height} />
+            <Box position="absolute" top={0} left={0} width="100%" height="100%" alignItems="center" justifyContent="center">
+              <Button key={area.key} plain onPress={area.onPress}>
+                <Text>{'\u00a0'.repeat(Math.max(1, Math.floor(area.width / 7)))}</Text>
+              </Button>
+            </Box>
+          </Box>
+        ]
+      })
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
-        <Box key="usage-bars" flexDirection="column" paddingX={1}>
-          <Box alignSelf="flex-start" flexShrink={0}>
+        <Box key="usage-bars" flexDirection="column" alignItems="center" paddingX={1}>
+          <Box flexShrink={0}>
             <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} />
-            {!hover ? null : hit('usage-week', hover.left, hover.width, async () => { await update($, weekOpen, open => !open) })}
-            {pills}
+            <Box key="usage-hits" position="absolute" top={0} left={0} height="100%" flexDirection="row" alignItems="center">
+              {overlay}
+            </Box>
           </Box>
           {!weekShown || !hover ? null : (
-            <Box key="usage-week-detail" alignSelf="flex-start">
+            <Box key="usage-week-detail">
               <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
             </Box>
           )}
