@@ -116,32 +116,33 @@ export const register: Register = on => {
       const hover = weekHover(band.layout)
       const detail = detailSvg(input, scale, hover ? band.width - hover.left : band.width)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
+      const pills = systemPills(sys).map((pill, i) => (
+        <Box key={`pill-${pill.panel}`} flexDirection="row" gap={0} alignItems="center" flexShrink={0}>
+          <Box alignSelf="flex-start">
+            <Svg source={pillSvg(scale)} alt="" width={PILL_W * scale} height={PILL_H * scale} />
+            <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" alignItems="center" justifyContent="center">
+              <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING * scale} height={PILL_RING * scale} />
+              <Svg source={spacerSvg(PILL_RING_GAP * scale)} alt="" width={PILL_RING_GAP * scale} height={1} />
+              {pill.enabled ? (
+                <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
+                  onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
+                  <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>
+                </Button>
+              ) : <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>}
+            </Box>
+          </Box>
+          {i === 2 ? null : <Svg source={spacerSvg(PILL_GAP * scale)} alt="" width={PILL_GAP * scale} height={1} />}
+        </Box>
+        ))
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
         <Box key="usage-bars" flexDirection="column" paddingX={1}>
           <Box alignSelf="flex-start" flexShrink={0}>
             <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} />
-            {!band.layout.system ? null : (
+            {!band.layout.system || band.layout.pillsBelow ? null : (
               <Box position="absolute" top={0} left={0} height="100%" flexDirection="row" gap={0} alignItems="center">
                 <Svg source={spacerSvg(band.layout.pillStart)} alt="" width={band.layout.pillStart} height={1} />
-                {systemPills(sys).map((pill, i) => (
-                  <Box key={`pill-${pill.panel}`} flexDirection="row" gap={0} alignItems="center" flexShrink={0}>
-                    <Box alignSelf="flex-start">
-                      <Svg source={pillSvg(scale)} alt="" width={PILL_W * scale} height={PILL_H * scale} />
-                      <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" alignItems="center" justifyContent="center">
-                        <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING * scale} height={PILL_RING * scale} />
-                        <Svg source={spacerSvg(PILL_RING_GAP * scale)} alt="" width={PILL_RING_GAP * scale} height={1} />
-                        {pill.enabled ? (
-                          <Button key={`usage-${pill.panel}`} plain hover={{ inverse: true }}
-                            onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
-                            <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>
-                          </Button>
-                        ) : <Text size={scale >= 1.4 ? 'heading' : 'body'} tabular>{`${pill.label} ${pill.value}`}</Text>}
-                      </Box>
-                    </Box>
-                    {i === 2 ? null : <Svg source={spacerSvg(PILL_GAP * scale)} alt="" width={PILL_GAP * scale} height={1} />}
-                  </Box>
-                ))}
+                {pills}
               </Box>
             )}
             {!hover ? null : (
@@ -156,6 +157,11 @@ export const register: Register = on => {
               </Box>
             )}
           </Box>
+          {!band.layout.system || !band.layout.pillsBelow ? null : (
+            <Box flexDirection="row" alignItems="center" alignSelf="flex-start" flexShrink={0}>
+              {pills}
+            </Box>
+          )}
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
               <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />

@@ -263,13 +263,13 @@ test('desktop drawn width fits every pane or draws nothing, without shrinking te
   }
 })
 
-test('desktop drops dollars, pills, context, then week at four compact widths', () => {
+test('desktop never drops pills: they move below the band when the row is too narrow', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
-  expect(desktop.desktopLayout(125)).toMatchObject({ spend: false, system: true, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(100)).toMatchObject({ spend: false, system: false, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(60)).toMatchObject({ spend: false, system: false, panels: ['day', 'week'] })
-  expect(desktop.desktopLayout(40)).toMatchObject({ spend: false, system: false, panels: ['day'] })
-  expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, pillsBelow: false, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(125)).toMatchObject({ spend: false, system: true, pillsBelow: false, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(100)).toMatchObject({ system: true, pillsBelow: true, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(60)).toMatchObject({ system: true, pillsBelow: true, panels: ['day', 'week'] })
+  expect(desktop.desktopLayout(40)).toMatchObject({ system: true, pillsBelow: true, panels: ['day'] })
 })
 
 test('hover card uses one 14px body line and never renders text below 13px', () => {

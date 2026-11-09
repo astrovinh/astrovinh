@@ -172,31 +172,33 @@ type DesktopLayout = {
   panels: ('day' | 'week' | 'ctx')[]
   spend: boolean
   system: boolean
+  pillsBelow: boolean
   scale: number
   width: number
   pillStart: number
 }
 
-/** Keep readable type, dropping whole sections before they would overflow. */
+/** Keep readable type. Pills stay in the band's row when they fit, and move to their own row below it when they do not. */
 export function desktopLayout(columns: number | undefined, spend = true, system = true): DesktopLayout {
   const scale = bandScale(columns)
   const available = columns === undefined ? Infinity : columns * 7 - 16
-  const full = { panels: ['day', 'week', 'ctx'] as DesktopLayout['panels'], spend, system }
-  const candidates = [
-    full,
-    { ...full, spend: false },
-    { ...full, spend: false, system: false },
-    { ...full, spend: false, system: false, panels: ['day', 'week'] as DesktopLayout['panels'] },
-    { ...full, spend: false, system: false, panels: ['day'] as DesktopLayout['panels'] }
+  const all = ['day', 'week', 'ctx'] as DesktopLayout['panels']
+  const candidates: DesktopLayout[] = [
+    { panels: all, spend, system, pillsBelow: false, scale, width: 0, pillStart: 0 },
+    { panels: all, spend: false, system, pillsBelow: false, scale, width: 0, pillStart: 0 },
+    { panels: all, spend: false, system, pillsBelow: true, scale, width: 0, pillStart: 0 },
+    { panels: ['day', 'week'], spend: false, system, pillsBelow: true, scale, width: 0, pillStart: 0 },
+    { panels: ['day'], spend: false, system, pillsBelow: true, scale, width: 0, pillStart: 0 }
   ]
   for (const candidate of candidates) {
     const content = PAD + candidate.panels.length * GROUP_W + (candidate.panels.length - 1) * GROUP_GAP +
       (candidate.spend ? GROUP_GAP + COST_W : 0)
     const pillStart = content + GROUP_GAP
-    const width = (candidate.system ? pillStart + PILLS_W + PAD : content + PAD) * scale
+    const inline = candidate.system && !candidate.pillsBelow
+    const width = (inline ? pillStart + PILLS_W + PAD : content + PAD) * scale
     if (width <= available) return { ...candidate, scale, width, pillStart: pillStart * scale }
   }
-  return { panels: [], spend: false, system: false, scale, width: 0, pillStart: 0 }
+  return { panels: [], spend: false, system: false, pillsBelow: false, scale, width: 0, pillStart: 0 }
 }
 
 export function esc(s: string): string {
