@@ -139,12 +139,13 @@ type Reading = { percentUsed: number; resetsAt?: string }
 
 const H = 14
 const BAR_H = 4
-const LABEL_W = 32
-const BAR_W = 56
+const LABEL_W = 24
+const BAR_MAX = 56
+const BAR_MIN = 12
 const PCT_GAP = 5
 const PCT_W = 30
 const GROUP_GAP = 14
-const GROUP_W = LABEL_W + BAR_W + PCT_GAP + PCT_W
+const GROUP_FIXED = LABEL_W + PCT_GAP + PCT_W
 const INK = '#8b8b8b'
 const FAINT = 'rgba(139,139,139,0.45)'
 const TRACK = 'rgba(139,139,139,0.22)'
@@ -152,52 +153,48 @@ const BUFFER = 'rgba(139,139,139,0.38)'
 
 const COST_W = 48
 const PAD = 12
-export const PILL_W = 84
 export const PILL_H = 28
-export const PILL_GAP = 6
-export const PILL_RING = 11
-const PILLS_W = PILL_W * 3 + PILL_GAP * 2
+export const PILL_RING = 10
+/** The three text pills beside the band, worst case, in CSS px: ring, gap and "C 100%". They do not scale with the band. */
+const PILLS_PX = 190
 
-export const BAND_W = PAD * 2 + GROUP_W * 3 + GROUP_GAP * 4 + COST_W + PILLS_W
+export const BAND_W = PAD * 2 + (GROUP_FIXED + BAR_MAX) * 3 + GROUP_GAP * 4 + COST_W
 export const BAND_H = 42
 
 /** The host measures panes in code-font cells; SVGs draw in CSS pixels. */
 export function bandScale(columns: number | undefined): number {
-  const available = columns === undefined ? BAND_W : columns * 7 - 16
-  return Math.max(1.15, Math.min(1.6, available / BAND_W))
+  const available = columns === undefined ? BAND_W + PILLS_PX : columns * 7 - 16
+  return Math.max(1.15, Math.min(1.6, (available - PILLS_PX) / BAND_W))
 }
 
 type DesktopLayout = {
   panels: ('day' | 'week' | 'ctx')[]
   spend: boolean
   system: boolean
-  pillsBelow: boolean
+  barW: number
   scale: number
   width: number
-  pillStart: number
 }
 
-/** Keep readable type. Pills stay in the band's row when they fit, and move to their own row below it when they do not. */
+/** One line at any width: the bars shrink first, then dollars, then panels go, never the pills. */
 export function desktopLayout(columns: number | undefined, spend = true, system = true): DesktopLayout {
   const scale = bandScale(columns)
   const available = columns === undefined ? Infinity : columns * 7 - 16
+  const budget = (available - (system ? PILLS_PX : 0)) / scale
   const all = ['day', 'week', 'ctx'] as DesktopLayout['panels']
-  const candidates: DesktopLayout[] = [
-    { panels: all, spend, system, pillsBelow: false, scale, width: 0, pillStart: 0 },
-    { panels: all, spend: false, system, pillsBelow: false, scale, width: 0, pillStart: 0 },
-    { panels: all, spend: false, system, pillsBelow: true, scale, width: 0, pillStart: 0 },
-    { panels: ['day', 'week'], spend: false, system, pillsBelow: true, scale, width: 0, pillStart: 0 },
-    { panels: ['day'], spend: false, system, pillsBelow: true, scale, width: 0, pillStart: 0 }
+  const candidates = [
+    { panels: all, spend },
+    { panels: all, spend: false },
+    { panels: ['day', 'week'] as DesktopLayout['panels'], spend: false },
+    { panels: ['day'] as DesktopLayout['panels'], spend: false }
   ]
-  for (const candidate of candidates) {
-    const content = PAD + candidate.panels.length * GROUP_W + (candidate.panels.length - 1) * GROUP_GAP +
-      (candidate.spend ? GROUP_GAP + COST_W : 0)
-    const pillStart = content + GROUP_GAP
-    const inline = candidate.system && !candidate.pillsBelow
-    const width = (inline ? pillStart + PILLS_W + PAD : content + PAD) * scale
-    if (width <= available) return { ...candidate, scale, width, pillStart: pillStart * scale }
+  for (const c of candidates) {
+    const n = c.panels.length
+    const fixed = PAD * 2 + n * GROUP_FIXED + (n - 1) * GROUP_GAP + (c.spend ? GROUP_GAP + COST_W : 0)
+    const barW = Math.min(BAR_MAX, Math.floor((budget - fixed) / n))
+    if (barW >= BAR_MIN) return { ...c, system, barW, scale, width: (fixed + n * barW) * scale }
   }
-  return { panels: [], spend: false, system: false, pillsBelow: false, scale, width: 0, pillStart: 0 }
+  return { panels: [], spend: false, system, barW: BAR_MIN, scale, width: 0 }
 }
 
 export function esc(s: string): string {
@@ -209,7 +206,7 @@ function tokens(n: number): string {
 }
 
 /** One label + bar + percent; `fills` are the bar's colored runs, in pixels from the left. */
-function group(i: number, label: string, fills: { width: number; color: string }[], pct: number | null): string {
+function group(i: number, label: string, fills: { width: number; color: string }[], pct: number | null, barW: number): string {
   let x = 0
   const runs = fills
     .filter(f => f.width > 0)
@@ -221,21 +218,21 @@ function group(i: number, label: string, fills: { width: number; color: string }
     .join('')
 
   return (
-    `<g transform="translate(${i * (GROUP_W + GROUP_GAP)} 0)">` +
+    `<g transform="translate(${i * (GROUP_FIXED + barW + GROUP_GAP)} 0)">` +
     `<text x="0" y="10.5" fill="${INK}">${label}</text>` +
     `<g transform="translate(${LABEL_W} ${(H - BAR_H) / 2})">` +
-    `<clipPath id="c${i}"><rect width="${BAR_W}" height="${BAR_H}" rx="${BAR_H / 2}"/></clipPath>` +
-    `<rect width="${BAR_W}" height="${BAR_H}" rx="${BAR_H / 2}" fill="${TRACK}"/>` +
+    `<clipPath id="c${i}"><rect width="${barW}" height="${BAR_H}" rx="${BAR_H / 2}"/></clipPath>` +
+    `<rect width="${barW}" height="${BAR_H}" rx="${BAR_H / 2}" fill="${TRACK}"/>` +
     `<g clip-path="url(#c${i})">${runs}</g></g>` +
-    `<text x="${LABEL_W + BAR_W + PCT_GAP}" y="10.5" fill="${pct === null ? FAINT : INK}">${pct === null ? '\u2013' : `${Math.round(pct)}%`}</text>` +
+    `<text x="${LABEL_W + barW + PCT_GAP}" y="10.5" fill="${pct === null ? FAINT : INK}">${pct === null ? '\u2013' : `${Math.round(pct)}%`}</text>` +
     `</g>`
   )
 }
 
-function limitGroup(i: number, label: string, r: Reading | undefined): string {
-  if (!r) return group(i, label, [], null)
-  const used = limitCells(r.percentUsed, BAR_W)[0]!
-  return group(i, label, [{ width: used.width, color: used.color! }], r.percentUsed)
+function limitGroup(i: number, label: string, r: Reading | undefined, barW: number): string {
+  if (!r) return group(i, label, [], null, barW)
+  const used = limitCells(r.percentUsed, barW)[0]!
+  return group(i, label, [{ width: used.width, color: used.color! }], r.percentUsed, barW)
 }
 
 import type { Spend, System } from '../types'
@@ -256,7 +253,7 @@ export function usd(n: number): string {
 /** Day, Week and Ctx share one row; native pill buttons sit over its right side. */
 export function bandSvg(a: BandInput, columns?: number): { source: string; alt: string; width: number; height: number; layout: DesktopLayout } {
   const layout = desktopLayout(columns, a.spend !== null, a.system !== null)
-  const { cells } = contextCells(a.segments, BAR_W)
+  const { cells } = contextCells(a.segments, layout.barW)
   const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '\u2500' ? BUFFER : 'transparent') }))
 
   const pct = (r?: Reading) => (r ? `${Math.round(r.percentUsed)}%` : 'no reading')
@@ -269,12 +266,12 @@ export function bandSvg(a: BandInput, columns?: number): { source: string; alt: 
   const height = BAND_H * layout.scale
   const baseWidth = width / layout.scale
   const groups = layout.panels.map((panel, i) => panel === 'ctx'
-    ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null)
-    : limitGroup(i, panel === 'day' ? 'Day' : 'Week', panel === 'day' ? a.day : a.week)).join('')
+    ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null, layout.barW)
+    : limitGroup(i, panel === 'day' ? 'D' : 'W', panel === 'day' ? a.day : a.week, layout.barW)).join('')
   const source =
     svgOpen(baseWidth, BAND_H, layout.scale, 11) +
     `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
-    (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_W + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
+    (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_FIXED + layout.barW + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
     `</g>` +
     `</svg>`
 
@@ -300,9 +297,9 @@ export type Panel = 'cpu' | 'mem' | 'disk'
 export function systemPills(sys: System | null) {
   if (sys === null) return []
   return ([
-    { panel: 'cpu', label: 'CPU', percent: sys.cpu },
-    { panel: 'mem', label: 'Mem', percent: sys.memory },
-    { panel: 'disk', label: 'Disk', percent: sys.disk?.percent ?? null }
+    { panel: 'cpu', label: 'C', percent: sys.cpu },
+    { panel: 'mem', label: 'M', percent: sys.memory },
+    { panel: 'disk', label: 'D', percent: sys.disk?.percent ?? null }
   ] as const).map(p => ({
     ...p,
     value: p.percent === null ? '\u2013' : `${Math.round(p.percent)}%`,
@@ -324,7 +321,8 @@ export function spacerSvg(width: number, height = 1): string {
 export function weekHover(layout: DesktopLayout): { left: number; width: number; height: number } | null {
   const i = layout.panels.indexOf('week')
   if (i < 0) return null
-  return { left: (PAD + i * (GROUP_W + GROUP_GAP)) * layout.scale, width: GROUP_W * layout.scale, height: BAND_H * layout.scale }
+  const groupW = GROUP_FIXED + layout.barW
+  return { left: (PAD + i * (groupW + GROUP_GAP)) * layout.scale, width: groupW * layout.scale, height: BAND_H * layout.scale }
 }
 
 /** About how wide `s` draws at 10px in the system font, a little generous so text never collides. */

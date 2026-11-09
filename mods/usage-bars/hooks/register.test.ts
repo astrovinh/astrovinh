@@ -156,14 +156,16 @@ test('an unmeasured terminal keeps the full band', async ($, on) => {
   }
 })
 
-test('the desktop yields when even Day cannot fit at the minimum scale', async ($, on) => {
+test('only the pills show when even Day cannot fit at the minimum scale', async ($, on) => {
   readings(on)
   const ui = await $.ui.mount({
     plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props,
     viewport: { columns: 12, rows: 24 }
   })
   try {
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(0)
+    const svgs = await ui.findAll({ type: 'Svg' })
+    expect(svgs).toHaveLength(3)
+    expect(svgs.some(s => String(s.props.alt).startsWith('Day'))).toBe(false)
   } finally {
     await ui.unmount()
   }
@@ -176,9 +178,9 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
     try {
       const svgs = await ui.findAll({ type: 'Svg' })
       // A validation refusal must not masquerade as a zero-width successful render.
-      // Band, plus the Week hover (two spacers and the detail card) when Week fits, plus one ring drawing per pill.
-      expect(svgs.length).toBe(columns <= 12 ? 0 : columns < 49 ? 4 : 7)
-      for (const svg of svgs) {
+      // Three pill rings always; the band from 46 columns, with the Week hover (two spacers and the card) from 59.
+      expect(svgs.length).toBe(columns < 46 ? 3 : columns < 59 ? 4 : 7)
+      for (const svg of svgs.filter(s => Number(s.props.width) > 10)) {
         expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
       }
     } finally { await ui.unmount() }
@@ -190,7 +192,7 @@ test('desktop pills open, switch, toggle and close the read-only drawer through 
   state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['CPU 18%', 'Mem 71%', 'Disk 83%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['C 18%', 'M 71%', 'D 83%'])
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.
@@ -236,9 +238,9 @@ test('missing readings are unpressable and losing system data hides an open draw
   state.system = { cpu: null, cores: 8, memory: 71, memoryGb: 32, disk: null, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['Mem 71%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['M 71%'])
     expect(await ui.find({ key: 'usage-cpu' })).toBe(undefined)
-    expect(await ui.find({ type: 'Text', text: 'CPU \u2013' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'C \u2013' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })
     await ui.redraw()
     expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(true)

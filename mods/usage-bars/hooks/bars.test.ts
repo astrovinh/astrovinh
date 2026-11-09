@@ -135,7 +135,7 @@ test('untilReset formats days, hours, minutes', () => {
 
 test('band shows a dash when a limit has no reading', () => {
   const { source, alt } = bandSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 })
-  expect(source.includes('>Day<')).toBe(true)
+  expect(source.includes('>D<')).toBe(true)
   expect(source.includes('>\u2013<')).toBe(true)
   expect(alt).toBe('Day no reading, Week no reading, Context no reading')
 })
@@ -263,13 +263,18 @@ test('desktop drawn width fits every pane or draws nothing, without shrinking te
   }
 })
 
-test('desktop never drops pills: they move below the band when the row is too narrow', () => {
+test('desktop fits one line: bars shrink first, then dollars, then panels, never the pills', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
-  expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, pillsBelow: false, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(125)).toMatchObject({ spend: false, system: true, pillsBelow: false, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(100)).toMatchObject({ system: true, pillsBelow: true, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(60)).toMatchObject({ system: true, pillsBelow: true, panels: ['day', 'week'] })
-  expect(desktop.desktopLayout(40)).toMatchObject({ system: true, pillsBelow: true, panels: ['day'] })
+  expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, barW: 56, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(98)).toMatchObject({ spend: true, system: true, barW: 42, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(78)).toMatchObject({ spend: false, system: true, barW: 22, panels: ['day', 'week', 'ctx'] })
+  expect(desktop.desktopLayout(60)).toMatchObject({ spend: false, system: true, panels: ['day', 'week'] })
+  expect(desktop.desktopLayout(50)).toMatchObject({ spend: false, system: true, panels: ['day'] })
+  for (let columns = 1; columns <= 300; columns++) {
+    const layout = desktop.desktopLayout(columns)
+    expect(layout.system).toBe(true)
+    if (layout.width) expect(layout.width + 190).toBeLessThanOrEqual(columns * 7 - 16)
+  }
 })
 
 test('hover card uses one 14px body line and never renders text below 13px', () => {
@@ -287,13 +292,13 @@ test('hover card uses one 14px body line and never renders text below 13px', () 
 
 test('system pills label each reading, preserve severity, and disable missing readings', () => {
   expect(typeof desktop.systemPills).toBe('function')
-  expect(desktop.systemPills(sys).map(p => `${p.label} ${p.value}`)).toEqual(['CPU 18%', 'Mem 71%', 'Disk 83%'])
+  expect(desktop.systemPills(sys).map(p => `${p.label} ${p.value}`)).toEqual(['C 18%', 'M 71%', 'D 83%'])
   expect(desktop.systemPills(sys).map(p => p.color)).toEqual(['#9ece6a', '#e0af68', '#e0af68'])
   for (const percent of [0, 59, 60, 84, 85, 100]) {
     const pills = desktop.systemPills({ ...sys, cpu: percent, memory: percent, disk: { percent, freeGb: 0 } })
     expect(pills.map(p => p.color)).toEqual(Array(3).fill(bars.severityColor(percent)))
   }
-  expect(desktop.systemPills({ ...sys, cpu: null })[0]).toMatchObject({ label: 'CPU', value: '\u2013', enabled: false })
+  expect(desktop.systemPills({ ...sys, cpu: null })[0]).toMatchObject({ label: 'C', value: '\u2013', enabled: false })
   expect(desktop.systemPills(null)).toEqual([])
 })
 
@@ -309,9 +314,10 @@ test('drawer uses existing readings only and disappears without a panel or syste
 test('the hover area covers only the Week group', () => {
   const layout = desktopLayout(160)
   const hover = weekHover(layout)!
-  expect(Math.round(hover.left)).toBe(Math.round((12 + 123 + 14) * layout.scale))
-  expect(Math.round(hover.width)).toBe(Math.round(123 * layout.scale))
-  expect(weekHover(desktopLayout(40))).toBe(null)
+  const groupW = 24 + layout.barW + 5 + 30
+  expect(Math.round(hover.left)).toBe(Math.round((12 + groupW + 14) * layout.scale))
+  expect(Math.round(hover.width)).toBe(Math.round(groupW * layout.scale))
+  expect(weekHover(desktopLayout(50))).toBe(null)
 })
 
 test('a pill ring takes its severity color and a null reading draws only the track', () => {

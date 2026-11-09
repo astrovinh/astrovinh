@@ -111,14 +111,14 @@ export const register: Register = on => {
       const { Box, Svg, Button, Text } = $.ui.resolve(e)
       const input = { day, week, segments: segs, contextPercent: pct, spend: spent, system: sys, now }
       const band = bandSvg(input, e.viewport?.columns)
-      if (!band.width) return next(e)
+      if (!band.width && !sys) return next(e)
       const { scale } = band.layout
       const hover = weekHover(band.layout)
       const detail = detailSvg(input, scale, hover ? band.width - hover.left : band.width)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
       const pills = systemPills(sys).map(pill => (
-        <Box key={`pill-${pill.panel}`} flexDirection="row" alignItems="center" marginRight={2} borderStyle="round" paddingX={1}>
-          <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING * scale} height={PILL_RING * scale} />
+        <Box key={`pill-${pill.panel}`} flexDirection="row" alignItems="center" marginRight={1}>
+          <Svg source={pillRingSvg(pill.percent, pill.color)} alt="" width={PILL_RING} height={PILL_RING} />
           <Box marginLeft={1}>
             {pill.enabled ? (
               <Button key={`usage-${pill.panel}`} plain
@@ -132,25 +132,27 @@ export const register: Register = on => {
       // SVGs size the row and its spacers in pixels; Boxes only align the controls.
       return (
         <Box key="usage-bars" flexDirection="column" paddingX={1}>
-          <Box alignSelf="flex-start" flexShrink={0}>
-            <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} />
-            {!hover ? null : (
-              <Box key="usage-week-hover" position="absolute" top={0} left={0} flexDirection="row">
-                <Svg source={spacerSvg(hover.left)} alt="" width={hover.left} height={1} />
-                <Box flexDirection="column">
-                  <Svg source={spacerSvg(hover.width, hover.height)} alt="" width={hover.width} height={hover.height} />
-                  <Box display="none" hover={{ display: 'flex' }}>
-                    <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
+          <Box flexDirection="row" alignItems="center" alignSelf="flex-start" flexShrink={0}>
+            <Box flexShrink={0}>
+              {band.width ? <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} /> : null}
+              {!hover ? null : (
+                <Box key="usage-week-hover" position="absolute" top={0} left={0} flexDirection="row">
+                  <Svg source={spacerSvg(hover.left)} alt="" width={hover.left} height={1} />
+                  <Box flexDirection="column">
+                    <Svg source={spacerSvg(hover.width, hover.height)} alt="" width={hover.width} height={hover.height} />
+                    <Box display="none" hover={{ display: 'flex' }}>
+                      <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
+                    </Box>
                   </Box>
                 </Box>
+              )}
+            </Box>
+            {!band.layout.system ? null : (
+              <Box marginLeft={1} flexShrink={0}>
+                {pills}
               </Box>
             )}
           </Box>
-          {!band.layout.system ? null : (
-            <Box flexDirection="row" alignItems="center" alignSelf="flex-start" flexShrink={0}>
-              {pills}
-            </Box>
-          )}
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
               <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
