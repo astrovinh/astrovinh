@@ -162,6 +162,8 @@ export const register: Register = on => {
               {pills}
             </Box>
           )}
+          {/* TEMP DEBUG: remove once the pills are confirmed */}
+          <Text size="caption">{`debug v3 cols=${e.viewport?.columns} sys=${sys === null ? 'null' : 'ok'} layoutSystem=${band.layout.system} below=${band.layout.pillsBelow} panels=${band.layout.panels.length} pills=${pills.length}`}</Text>
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
               <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
