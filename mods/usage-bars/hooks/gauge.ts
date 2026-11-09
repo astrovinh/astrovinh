@@ -64,13 +64,17 @@ export function shareSvg(g: Gauge, shares: number[], width: number): string {
   )
 }
 
-/** One legend row: its colour dot, the name, a quiet note, and the amount at the right. */
-export function rowSvg(color: string | null, name: string, note: string, amount: string, width: number): string {
+/**
+ * One legend row: its colour dot, the name, a quiet note, and the amount ending at `width`.
+ * A `tail` (such as "protected") is drawn in the action column after it, `tailPx` wide.
+ */
+export function rowSvg(color: string | null, name: string, note: string, amount: string, width: number, tail = '', tailPx = 0): string {
   const w = Math.max(80, width)
   const cy = ROW_H / 2
   const nameX = color ? 16 : 0
   return (
-    open(w, ROW_H) +
+    open(w + (tail ? tailPx : 0), ROW_H) +
+    (tail ? `<text x="${w + 10}" y="${cy + 4}" font-size="12" fill="${INK}">${esc(tail)}</text>` : '') +
     (color ? `<circle cx="5" cy="${cy}" r="4" fill="${color}"/>` : '') +
     `<text x="${nameX}" y="${cy + 4}" font-size="12" fill="${NAME}">${esc(name)}` +
     (note ? `<tspan dx="8" font-size="11" fill="${INK}">${esc(note)}</tspan>` : '') + '</text>' +

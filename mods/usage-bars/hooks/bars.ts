@@ -333,7 +333,8 @@ export function bandParts(band: ReturnType<typeof bandSvg>, sys: System | null):
       kind: 'picture',
       // Shift the drawing, not the viewBox: the desktop drops a picture whose viewBox starts anywhere but 0.
       source: svgOpen(to - from, BAND_H, layout.scale, 11) + `<g transform="translate(${-from} 0)">${inner}</g>` + '</svg>',
-      alt: parts.length ? '' : alt,
+      // Every picture needs a description: the desktop skips a picture whose alt is empty.
+      alt: parts.length ? 'Usage band' : alt,
       width: (to - from) * layout.scale,
       height: BAND_H * layout.scale
     })

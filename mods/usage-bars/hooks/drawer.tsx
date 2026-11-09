@@ -1,21 +1,25 @@
 import { bytes } from './cleanup'
 import type { Actions, View } from './actions'
 import type { Item } from './scan'
-import { CELL_PX, LEGEND, ROW_H, rowSvg, SHARE_H, shareSvg } from './gauge'
+import { LEGEND, ROW_H, rowSvg, SHARE_H, shareSvg } from './gauge'
 import type { Gauge } from './gauge'
 
 const ON = '\u25cf'
 const OFF = '\u25cb'
-/** Text columns beside the pictures: Close and Quit at the right, the tick at the left. */
-const ACTION_W = 12
-const TICK_W = 3
+/**
+ * Room beside the pictures, in CSS px: Close and Quit start right after each picture, so they share one
+ * left edge; the tick sits before Disk rows. Nothing is sized in text cells, whose pixel width the
+ * desktop never reports (sizing in cells made the drawer wider than the card).
+ */
+const ACTION_PX = 70
+const TICK_PX = 22
 
 /** One share bar and a colour legend drawn as pictures, with native text buttons beside them; the host supplies the card. */
 export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, close: () => Promise<void>, widthPx: number) {
   const { Box, Text, Button, Svg } = ui
-  // The drawer takes the band's width, so both share one left and one right edge.
-  const width = Math.max(20, Math.floor(widthPx / CELL_PX))
-  const px = (cells: number) => cells * CELL_PX
+  // The drawer takes the band's text width, so both share one left and one right edge.
+  const width = Math.max(240, widthPx)
+  const rowPx = width - ACTION_PX
   const ready = view.phase === 'ready'
   const picked = (kind: Item['kind']) => view.items.filter(i => i.kind === kind && view.selected.includes(i.id) && i.eligible)
   const total = (items: Item[]) => bytes(items.reduce((n, i) => n + i.bytes, 0))
@@ -23,7 +27,7 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
   const caches = view.items.filter(i => i.kind === 'cache').slice(0, 6)
   const cpu = view.panel === 'cpu'
   const listed = view.panel === 'disk' ? caches.map(i => share(i.bytes)) : view.groups.map(g => share(cpu ? g.cpu : g.bytes))
-  const picture = (key: string, source: string, alt: string, cells: number, height: number) => <Svg key={key} source={source} alt={alt} width={px(cells)} height={height} />
+  const picture = (key: string, source: string, alt: string, px: number, height: number) => <Svg key={key} source={source} alt={alt || 'Row'} width={px} height={height} />
   const quiet = (text: string) => <Text size="footnote" dimColor>{text}</Text>
   const line = (text: string) => <Box marginTop={1}><Text size="body">{text}</Text></Box>
   const action = (key: string, label: string, onPress: () => void) => (
@@ -32,14 +36,12 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
   const heading = (text: string) => <Box marginTop={1}><Text size="footnote" dimColor>{text}</Text></Box>
   const item = (color: string | null) => (i: Item) => (
     <Box key={`usage-row-${i.id}`} flexDirection="row" alignItems="center">
-      <Box width={TICK_W}>
-        {i.eligible ? (
-          <Button key={`usage-item-${i.id}`} plain onPress={() => actions.toggle(i.id)}>
-            <Text size="body">{view.selected.includes(i.id) ? ON : OFF}</Text>
-          </Button>
-        ) : null}
-      </Box>
-      {picture(`usage-pic-${i.id}`, rowSvg(color, i.name, i.eligible ? '' : 'kept, has changes', bytes(i.bytes), px(width - TICK_W)), `${i.name} ${bytes(i.bytes)}`, width - TICK_W, ROW_H)}
+      {i.eligible ? (
+        <Button key={`usage-item-${i.id}`} plain onPress={() => actions.toggle(i.id)}>
+          <Text size="body">{view.selected.includes(i.id) ? ON : OFF}</Text>
+        </Button>
+      ) : <Text size="body">{'\u00a0'}</Text>}
+      {picture(`usage-pic-${i.id}`, rowSvg(color, i.name, i.eligible ? '' : 'kept, has changes', bytes(i.bytes), rowPx - TICK_PX), `${i.name} ${bytes(i.bytes)}`, rowPx - TICK_PX, ROW_H)}
     </Box>
   )
   const section = (kind: 'worktree' | 'sim', name: string, button: string) => {
@@ -54,10 +56,10 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
     )
   }
   return (
-    <Box key="usage-drawer" flexDirection="column" width={width} marginTop={1}>
-      <Box flexDirection="row" alignItems="flex-start">
-        {picture('usage-share', shareSvg(gauge, ready ? listed : [], px(width - ACTION_W)), `${gauge.title} ${gauge.subtitle}`, width - ACTION_W, SHARE_H)}
-        <Box width={ACTION_W} alignItems="flex-end" paddingTop={1}><Button key="usage-close" plain onPress={close}>{quiet('Close')}</Button></Box>
+    <Box key="usage-drawer" flexDirection="column" marginTop={1}>
+      <Box flexDirection="row" alignItems="center">
+        {picture('usage-share', shareSvg(gauge, ready ? listed : [], rowPx), `${gauge.title} ${gauge.subtitle}`, rowPx, SHARE_H)}
+        <Box marginLeft={1}><Button key="usage-close" plain onPress={close}>{quiet('Close')}</Button></Box>
       </Box>
       {!view.message ? null : line(view.message)}
       {view.phase === 'looking' ? <Box marginTop={1}><Text size="body" dimColor>Looking...</Text></Box> : null}
@@ -75,12 +77,13 @@ export function drawerView(ui: any, gauge: Gauge, view: View, actions: Actions, 
           {!view.groups.length ? line('Nothing to clear right now.') : null}
           {view.groups.map((g, n) => (
             <Box key={`usage-group-${g.id}`} flexDirection="row" alignItems="center">
-              {picture(`usage-pic-${g.id}`, rowSvg(LEGEND[n % LEGEND.length]!, g.name, String(g.pids.length), cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes), px(width - ACTION_W)), `${g.name} ${cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes)}`, width - ACTION_W, ROW_H)}
-              <Box width={ACTION_W} alignItems="flex-end">
-                {g.protected ? quiet('protected') : (
+              {/* "protected" is drawn in the picture's action column; Quit is a native button right after it. */}
+              {picture(`usage-pic-${g.id}`, rowSvg(LEGEND[n % LEGEND.length]!, g.name, String(g.pids.length), cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes), rowPx, g.protected ? 'protected' : '', ACTION_PX), `${g.name} ${cpu ? `${Math.round(g.cpu)}%` : bytes(g.bytes)}${g.protected ? ', protected' : ''}`, g.protected ? width : rowPx, ROW_H)}
+              {g.protected ? null : (
+                <Box marginLeft={1}>
                   <Button key={`usage-quit-${g.id}`} plain onPress={() => actions.quit(g.id)}>{quiet(view.armed === `quit-${g.id}` ? 'Sure?' : 'Quit')}</Button>
-                )}
-              </Box>
+                </Box>
+              )}
             </Box>
           ))}
           <Box marginTop={1}><Button key="usage-refresh" plain onPress={() => actions.refresh()}>{quiet('Refresh')}</Button></Box>

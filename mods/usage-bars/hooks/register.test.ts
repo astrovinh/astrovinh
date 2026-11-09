@@ -191,6 +191,8 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
       const buttons = await ui.findAll({ type: 'Button' })
       expect(buttons).toHaveLength(3 + (weekHover(layout) ? 1 : 0))
       expect(svgs.length).toBe(buttons.length + 1)
+      // The desktop skips a picture with an empty description.
+      for (const svg of svgs) expect(String(svg.props.alt).trim()).not.toBe('')
       // Nothing is laid over the pictures: an overlay never draws on the desktop.
       expect(JSON.stringify(await ui.drawn())).not.toContain('"absolute"')
       // Below the pills' own width nothing fits; the pills still show at their smallest.
@@ -385,7 +387,7 @@ test('S5 Quit needs a second press within five seconds and re-reads PID identity
   try {
     await ui.press({ key: 'usage-mem' }); await ui.redraw()
     expect(await ui.find({ key: 'usage-quit-43' })).toBe(undefined)
-    expect(await ui.find({ type: 'Text', text: 'protected' })).not.toBe(undefined)
+    expect((await ui.findAll({ type: 'Svg' })).some(p => String(p.props.alt).endsWith(', protected') && String(p.props.source).includes('>protected</text>'))).toBe(true)
     await ui.press({ key: 'usage-quit-42' }); await ui.redraw()
     expect((await ui.find({ key: 'usage-quit-42' }))?.text).toBe('Sure?')
     expect(actions(h.calls)).toHaveLength(0)
