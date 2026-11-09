@@ -13,7 +13,7 @@ export type Context = { home: string; tmp: string; uid: number; pid: number; cwd
 export const safeLabel = (s: string) => s.replace(/[^\x20-\x7e]/g, '?').slice(0, 48)
 export async function command(io: IO, argv: string[]): Promise<string> {
   const r = await io.run(argv, { timeoutMs: 3000 })
-  if (r.exitCode !== 0 || r.isStdoutTruncated) throw new Error('Could not read these items.')
+  if (r.exitCode !== 0 || r.isStdoutTruncated) throw new Error(`${argv.slice(0, 3).join(' ')}: ${r.isStdoutTruncated ? 'output cut short' : `exit ${r.exitCode}`}`)
   return r.stdout
 }
 async function optional(io: IO, argv: string[]): Promise<string | null> {

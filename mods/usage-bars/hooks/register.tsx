@@ -92,7 +92,9 @@ const controls = ($: any) => actions ??= cleanupActions({
   run: (argv, init) => $.process.run(argv, init), fs: { stat: (path, options) => $.fs.stat(path, options), list: path => $.fs.list(path) },
   home: () => $.env.get('HOME'), tmp: () => $.env.get('TMPDIR'),
   cwd: () => $.session.cwd(), now: () => $.clock.now(),
-  after: (ms, fn) => $.clock.after(ms, fn)
+  after: (ms, fn) => $.clock.after(ms, fn),
+  // Local only (.debug is git-ignored): the last failure's real reason, for tracing.
+  log: async reason => { await $.fs.write(`${$.plugin.root}/.debug/last-error.txt`, `${new Date(await $.clock.now()).toISOString()}\n${reason}\n`) }
 }, view => update($, cleanupView, () => view).then(() => {}))
 const closeDrawer = async ($: any) => {
   await update($, openPanel, () => null)

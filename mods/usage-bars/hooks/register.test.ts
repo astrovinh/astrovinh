@@ -387,7 +387,7 @@ test('S5 Quit needs a second press within five seconds and re-reads PID identity
   try {
     await ui.press({ key: 'usage-mem' }); await ui.redraw()
     expect(await ui.find({ key: 'usage-quit-43' })).toBe(undefined)
-    expect((await ui.findAll({ type: 'Svg' })).some(p => String(p.props.alt).endsWith(', protected') && String(p.props.source).includes('>protected</text>'))).toBe(true)
+    expect((await ui.findAll({ type: 'Svg' })).some((p: any) => String(p.props.alt).endsWith(', protected') && String(p.props.source).includes('>protected</text>'))).toBe(true)
     await ui.press({ key: 'usage-quit-42' }); await ui.redraw()
     expect((await ui.find({ key: 'usage-quit-42' }))?.text).toBe('Sure?')
     expect(actions(h.calls)).toHaveLength(0)

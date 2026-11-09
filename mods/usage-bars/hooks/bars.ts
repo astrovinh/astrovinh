@@ -169,7 +169,7 @@ export const BAND_H = 42
 /** One text size everywhere: 11 band units at this scale is about the host's small native text. */
 export const BAND_SCALE = 1.15
 /** The widest the module grows on a wide session, in CSS px; it stays centred. */
-export const MODULE_MAX_PX = 820
+export const MODULE_MAX_PX = 1200
 /** The band's own side padding in CSS px; the drawer is inset by it so both share the same text edges. */
 export function bandInset(layout: { scale: number }): number {
   return PAD * layout.scale

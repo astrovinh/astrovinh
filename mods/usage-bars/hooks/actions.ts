@@ -8,14 +8,16 @@ import type { Context, IO, Item } from './scan'
 import type { Panel } from './bars'
 
 export const initialView = (): View => ({ panel: null, phase: 'readonly', items: [], groups: [], selected: [], armed: null, until: 0, message: '' })
-export type Host = IO & { home: () => Promise<string | undefined>; tmp: () => Promise<string | undefined>; cwd: () => Promise<string>; now: () => Promise<number>; after: (ms: number, fn: () => void) => unknown }
+export type Host = IO & { home: () => Promise<string | undefined>; tmp: () => Promise<string | undefined>; cwd: () => Promise<string>; now: () => Promise<number>; after: (ms: number, fn: () => void) => unknown; log?: (reason: string) => Promise<void> }
 /** Only event handlers call this controller. Rendering reads its published snapshot. */
 export function cleanupActions(io: Host, publish: (view: View) => Promise<void>) {
   let view = initialView(); let epoch = 0; let locked = false
   let context: Context | null = null
   const put = async (next: View) => { view = next; await publish(next) }
   const clock = async () => ({ ...context!, now: await io.now() })
-  const fail = async (token: number, message: string) => {
+  // The plain message is what people see; the real reason goes to a local log so a failure can be traced.
+  const fail = async (token: number, message: string, error?: unknown) => {
+    await io.log?.(String((error as Error)?.stack ?? error)).catch(() => {})
     if (token === epoch) await put({ ...view, phase: 'error', armed: null, message })
   }
   const load = async (token: number, message = '') => {
@@ -57,13 +59,13 @@ export function cleanupActions(io: Host, publish: (view: View) => Promise<void>)
         if (!cs?.realPath) throw new Error('Missing session directory')
         context = { home: hs.realPath, tmp: ts?.realPath ?? '', uid, pid, cwd: cs.realPath, now: await io.now() }
         if (token === epoch) await load(token)
-      } catch { await fail(token, 'Could not read these items.') }
+      } catch (e) { await fail(token, 'Could not read these items.', e) }
     },
     async refresh() {
       if (view.phase !== 'ready' || locked) return
       const token = ++epoch
       await put({ ...view, phase: 'looking', message: '', armed: null })
-      try { await load(token) } catch { await fail(token, 'Could not read these items.') }
+      try { await load(token) } catch (e) { await fail(token, 'Could not read these items.', e) }
     },
     async toggle(id: string) {
       if (view.phase !== 'ready' || locked || !view.items.some(i => i.id === id && i.eligible)) return
@@ -108,7 +110,7 @@ export function cleanupActions(io: Host, publish: (view: View) => Promise<void>)
           }
         }
         await load(token, `Freed ${bytes(Math.max(0, before - after))}`)
-      } catch { await fail(token, 'Could not clear this item.') }
+      } catch (e) { await fail(token, 'Could not clear this item.', e) }
       finally { locked = false }
     },
     async quit(id: string) {
@@ -140,7 +142,7 @@ export function cleanupActions(io: Host, publish: (view: View) => Promise<void>)
         const remaining = parseProcesses(await command(io, PS))
         const after = remaining.filter(p => signalled.includes(p.pid) && group.processes.some(original => sameProcess(original, p))).reduce((n,p) => n + p.rss, 0)
         await load(token, `Freed ${bytes(Math.max(0, before - after))}`)
-      } catch { await fail(token, 'Could not quit this app.') }
+      } catch (e) { await fail(token, 'Could not quit this app.', e) }
       finally { locked = false }
     }
   }
