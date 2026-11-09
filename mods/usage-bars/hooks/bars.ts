@@ -392,8 +392,8 @@ export function drawer(panel: Panel | null, sys: System | null, scale: number, m
   if (!panel || !sys) return null
   const title = { cpu: 'CPU', mem: 'Memory', disk: 'Disk' }[panel]
   const percent = panel === 'cpu' ? sys.cpu : panel === 'mem' ? sys.memory : sys.disk?.percent ?? null
-  const text = percent === null ? `${title} \u2013` : `${title} ${Math.round(percent)}% used`
-  return card([{ text: title }, { text, secondary: true }], scale, maxWidth, PILL_H)
+  const text = percent === null ? `${title} \u2013` : `${title} ${Math.round(percent)}% ${panel === 'cpu' ? 'busy' : 'used'}${panel === 'disk' && sys.disk ? `, ${Math.round(sys.disk.freeGb)} GB free` : ''}`
+  return card([{ text }], scale, maxWidth, PILL_H)
 }
 
 function svgOpen(width: number, height = H, scale = 1, font = 14): string {

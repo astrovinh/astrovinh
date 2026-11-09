@@ -7,6 +7,8 @@ import type { Cell, Panel } from './bars'
 import { parseLedger, record, totals } from './ledger'
 import type { Ledger } from './ledger'
 import { parseCpu, parseDisk, parseMemory } from './system'
+import { cleanupActions, initialView } from './actions'
+import { drawerView } from './drawer'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
 const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
@@ -16,6 +18,8 @@ const spend = atom({ plugin: 'usage-bars', key: 'spend' } as const, null as Spen
 const system = atom({ plugin: 'usage-bars', key: 'system' } as const, null as System | null)
 const openPanel = atom({ plugin: 'usage-bars', key: 'panel' } as const, null as Panel | null)
 const weekOpen = atom({ plugin: 'usage-bars', key: 'weekOpen' } as const, false)
+
+const cleanupView = atom({ plugin: 'usage-bars', key: 'cleanupView' } as const, initialView())
 
 const SYSTEM_MS = 10_000
 
@@ -82,6 +86,18 @@ async function tally($: any, total: number) {
   await update($, spend, () => totals(ledgers, total, now))
 }
 
+let actions: ReturnType<typeof cleanupActions> | null = null
+const controls = ($: any) => actions ??= cleanupActions({
+  run: (argv, init) => $.process.run(argv, init), fs: { stat: (path, options) => $.fs.stat(path, options), list: path => $.fs.list(path) },
+  home: () => $.env.get('HOME'), tmp: () => $.env.get('TMPDIR'),
+  cwd: () => $.session.cwd(), now: () => $.clock.now(),
+  after: (ms, fn) => $.clock.after(ms, fn)
+}, view => update($, cleanupView, () => view).then(() => {}))
+const closeDrawer = async ($: any) => {
+  await update($, openPanel, () => null)
+  await controls($).close()
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await refresh($).catch(() => {})
@@ -124,7 +140,13 @@ export const register: Register = on => {
           <Box marginLeft={1}>
             {pill.enabled ? (
               <Button key={`usage-${pill.panel}`} plain
-                onPress={async () => { await update($, openPanel, current => current === pill.panel ? null : pill.panel) }}>
+                onPress={async () => {
+                  if (await read($, openPanel) === pill.panel) await closeDrawer($)
+                  else {
+                    await update($, openPanel, () => pill.panel)
+                    await controls($).open(pill.panel)
+                  }
+                }}>
                 <Text tabular>{`${pill.label} ${pill.value}`}</Text>
               </Button>
             ) : <Text tabular>{`${pill.label} ${pill.value}`}</Text>}
@@ -157,14 +179,7 @@ export const register: Register = on => {
               <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
             </Box>
           )}
-          {!opened ? null : (
-            <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
-              <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
-              <Box position="absolute" bottom={0} left={0} width="100%" flexDirection="row" justifyContent="flex-end" paddingX={1}>
-                <Button key="usage-close" plain onPress={async () => { await update($, openPanel, () => null) }}>Close</Button>
-              </Box>
-            </Box>
-          )}
+          {!opened ? null : drawerView({ Box, Text, Button }, opened.alt, await read($, cleanupView) ?? initialView(), controls($), () => closeDrawer($), e.viewport?.columns)}
         </Box>
       )
     }

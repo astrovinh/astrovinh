@@ -6,8 +6,9 @@ const props: RenderPropsOf['AbovePrompt'] = {
   scroll: { offset: 0, bodyRows: 10 }, view: {}
 }
 
-function readings(on: On) {
-  mock.clock(on, { now: 0 })
+function readings(on: On, now = 0, host = false) {
+  const testClock = mock.clock(on, { now })
+  if (!host) on('process.run', () => ({ value: { exitCode: 0, stdout: 'Linux', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   const state: Record<string, unknown> = {
     limits: [{ kind: 'five_hour', percentUsed: 100 }, { kind: 'seven_day', percentUsed: 100 }],
     segments: [{ name: 'Used', kind: 'used', tokens: 100 }],
@@ -25,6 +26,7 @@ function readings(on: On) {
     return { value: { isSet: true as const, version }, version }
   })
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => e.surface === 'desktop' ? $.ui.resolve(e).Box({}) : next(e))
+  Object.defineProperty(state, '_clock', { value: testClock })
   return state
 }
 
@@ -188,7 +190,7 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
   })
 }
 
-test('desktop pills open, switch, toggle and close the read-only drawer through the real hook', async ($, on) => {
+test('desktop pills open, switch, toggle and close the plain drawer through the real hook', async ($, on) => {
   const state = readings(on)
   state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
@@ -197,7 +199,7 @@ test('desktop pills open, switch, toggle and close the read-only drawer through 
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(true)
+    expect(await ui.find({ type: 'Text', text: 'Memory 71% used' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe(null)
     await ui.redraw()
@@ -207,7 +209,7 @@ test('desktop pills open, switch, toggle and close the read-only drawer through 
     await ui.press({ key: 'usage-disk' })
     expect(state.panel).toBe('disk')
     await ui.redraw()
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Disk 83% used'))).toBe(true)
+    expect(await ui.find({ type: 'Text', text: 'Disk 83% used, 170 GB free' })).not.toBe(undefined)
     await ui.press({ key: 'usage-close' })
     expect(state.panel).toBe(null)
     await ui.redraw()
@@ -244,7 +246,7 @@ test('missing readings are unpressable and losing system data hides an open draw
     expect(await ui.find({ type: 'Text', text: 'C \u2013' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })
     await ui.redraw()
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(true)
+    expect(await ui.find({ type: 'Text', text: 'Memory 71% used' })).not.toBe(undefined)
     state.system = null
     await ui.redraw()
     expect((await ui.findAll({ type: 'Button' })).filter(b => b.text.trim())).toHaveLength(0)
@@ -268,3 +270,152 @@ test('pressing Week opens a one-line detail card under the band and pressing aga
   } finally { await ui.unmount() }
 })
 
+
+
+const TEST_HOME = '/Users/tester'
+const OLD = 1
+const NOW = 60 * 86400000
+function cleanupHost(on: On, platform = 'Darwin', extras = false) {
+  const state = readings(on, NOW, true)
+  const calls: string[][] = []
+  const live = new Set(['pip', 'Yarn'])
+  let failAction = false
+  let changePid = false
+  let simGone = false; let treeGone = false
+  const simId = '00000000-0000-0000-0000-000000000001'
+  const stat = (path: string) => ({ kind: 'dir' as const, size: 0, mtimeMs: OLD, isLink: false, realPath: path })
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? TEST_HOME : e.name === 'TMPDIR' ? '/private/tmp/plugin-test' : undefined }))
+  on('session.cwd', () => ({ value: '/session' }))
+  on('fs.stat', (_, e) => {
+    if (extras && [ `${TEST_HOME}/repo`, `${TEST_HOME}/repo/.git`, '/old-tree', `${TEST_HOME}/Library/Developer/CoreSimulator/Devices/${simId}/data`].includes(e.path)) return { value: stat(e.path) }
+    if ([TEST_HOME, '/private/tmp/plugin-test', '/session'].includes(e.path) || [...live].some(n => e.path === `${TEST_HOME}/Library/Caches/${n}`)) return { value: stat(e.path) }
+    return { value: { kind: 'other', size: 0, mtimeMs: 0, isLink: false } }
+  })
+  on('fs.list', (_, e) => ({ value: extras && e.path === TEST_HOME ? [{ name: 'repo', ...stat(`${TEST_HOME}/repo`) }] : [] }))
+  const ps = () => `42 1 501 1800000 15 Sun Nov 8 12:00:00 2026 /Applications/Browser.app/Contents/MacOS/Browser\n43 1 501 1000000 1 Sun Nov 8 12:00:00 2026 Terminal\n99 1 501 1000 1 Sun Nov 8 12:00:00 2026 plugin-host`.replace(/\\n/g, '\n')
+  on('process.run', (_, e) => {
+    const a = [...e.argv]; calls.push(a)
+    let stdout = ''
+    let exitCode = 0
+    if (a[0] === 'uname') stdout = platform
+    else if (a[0] === 'id') stdout = '501'
+    else if (a[0] === 'python3') stdout = '99'
+    else if (a[0] === 'du') stdout = `${live.has(a[a.length - 1]!.split('/').pop()!) || (extras && (a.includes('/old-tree') || a.some(p => p.includes('CoreSimulator')))) ? 1000000 : 0}\tcache`
+    else if (a[0] === 'ps') stdout = changePid && a.includes('-p') ? ps().replace('12:00:00', '12:00:01') : ps()
+    else if (a[0] === 'rm') {
+      if (failAction) exitCode = 1
+      else live.delete(a[a.length - 1]!.split('/').pop()!)
+    } else if (a[0] === 'xcrun') {
+      if (a.includes('delete')) simGone = true
+      stdout = JSON.stringify({ devices: { runtime: extras && !simGone ? [{ name: 'Old phone', udid: simId, state: 'Shutdown', isAvailable: true }] : [] } })
+    } else if (a[0] === 'git') {
+      if (a.includes('list')) stdout = `worktree /main${treeGone ? '' : '\n\nworktree /old-tree'}`
+      else if (a.includes('rev-parse')) stdout = 'origin/feature'
+      else if (a.includes('remove')) treeGone = true
+    }
+    return { value: { exitCode, stdout, stderr: exitCode ? 'denied' : '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  return { state, calls, live, fail: () => { failAction = true }, reuse: () => { changePid = true } }
+}
+const actions = (calls: string[][]) => calls.filter(a => ['rm', 'kill', 'brew', 'npm', 'yarn'].includes(a[0]!) || (a[0] === 'git' && a.includes('remove')) || (a[0] === 'xcrun' && a.includes('delete')))
+const mountCleanup = ($: any) => $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 40 } })
+test('S1 render and clocks do not scan; a pill scans read-only and selection controls exact cleanup', async ($, on) => {
+  const h = cleanupHost(on)
+  const ui = await mountCleanup($)
+  try {
+    expect(h.calls).toHaveLength(0)
+    await (h.state._clock as ReturnType<typeof mock.clock>).advance(10000)
+    expect(h.calls).toHaveLength(0)
+    await ui.press({ key: 'usage-disk' }); await ui.redraw()
+    expect(h.calls.some(a => a[0] === 'du'), JSON.stringify(h.calls) + JSON.stringify(h.state.cleanupView)).toBe(true)
+    expect(actions(h.calls)).toHaveLength(0)
+    const rows = await ui.findAll({ type: 'Button', text: /^\[x\]/ })
+    expect(rows).toHaveLength(2)
+    await ui.press({ key: rows[1]!.key! }); await ui.redraw()
+    await ui.press({ key: 'usage-clean' }); await ui.redraw()
+    expect(actions(h.calls)).toHaveLength(1)
+    expect(actions(h.calls)[0]).toEqual(['rm', '-r', '--', `${TEST_HOME}/Library/Caches/pip`])
+    expect(await ui.find({ type: 'Text', text: 'Freed 1 GB' })).not.toBe(undefined)
+    expect(h.live.has('Yarn')).toBe(true)
+  } finally { await ui.unmount() }
+})
+test('S3/S4 worktree and simulator sections start unticked and each requires its own confirmation', async ($, on) => {
+  const h = cleanupHost(on, 'Darwin', true)
+  const ui = await mountCleanup($)
+  try {
+    await ui.press({ key: 'usage-disk' }); await ui.redraw()
+    expect(await ui.find({ type: 'Text', text: 'Old worktrees' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'Old simulators' })).not.toBe(undefined)
+    expect(await ui.find({ key: 'usage-remove-worktree' })).toBe(undefined)
+    expect(await ui.find({ key: 'usage-remove-sim' })).toBe(undefined)
+    expect(await ui.findAll({ type: 'Button', text: /^\[ \]/ })).toHaveLength(2)
+    await ui.press({ key: 'usage-clean' }); await ui.redraw()
+    expect(actions(h.calls).every(a => a[0] === 'rm')).toBe(true)
+    for (const [kind,id] of [['sim','sim-00000000-0000-0000-0000-000000000001'],['worktree','worktree-0']]) {
+      await ui.press({ key: `usage-item-${id}` }); await ui.redraw()
+      const before = actions(h.calls).length
+      await ui.press({ key: `usage-remove-${kind}` }); await ui.redraw()
+      expect((await ui.find({ key: `usage-remove-${kind}` }))?.text).toBe('Sure?')
+      expect(actions(h.calls)).toHaveLength(before)
+      await ui.press({ key: `usage-remove-${kind}` }); await ui.redraw()
+      expect(actions(h.calls)).toHaveLength(before + 1)
+    }
+    expect(actions(h.calls).filter(a => a[0] !== 'rm')).toEqual([
+      ['xcrun','simctl','delete','00000000-0000-0000-0000-000000000001'],
+      ['git','-C',`${TEST_HOME}/repo`,'worktree','remove','--','/old-tree']
+    ])
+  } finally { await ui.unmount() }
+})
+test('S5 Quit needs a second press within five seconds and re-reads PID identity', async ($, on) => {
+  const h = cleanupHost(on)
+  const ui = await mountCleanup($)
+  try {
+    await ui.press({ key: 'usage-mem' }); await ui.redraw()
+    expect(await ui.find({ key: 'usage-quit-43' })).toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'protected' })).not.toBe(undefined)
+    await ui.press({ key: 'usage-quit-42' }); await ui.redraw()
+    expect((await ui.find({ key: 'usage-quit-42' }))?.text).toBe('Sure?')
+    expect(actions(h.calls)).toHaveLength(0)
+    await (h.state._clock as ReturnType<typeof mock.clock>).advance(5001); await ui.redraw()
+    expect((await ui.find({ key: 'usage-quit-42' }))?.text).toBe('Quit')
+    await ui.press({ key: 'usage-quit-42' })
+    expect(actions(h.calls)).toHaveLength(0)
+    await ui.press({ key: 'usage-quit-42' }); await ui.redraw()
+    expect(actions(h.calls)).toEqual([['kill', '-TERM', '42']])
+    expect(h.calls.some(a => a[0] === 'ps' && a.includes('-p') && a.includes('42'))).toBe(true)
+  } finally { await ui.unmount() }
+})
+test('S5 changed PID identity never receives a signal', async ($, on) => {
+  const h = cleanupHost(on)
+  const ui = await mountCleanup($)
+  try {
+    await ui.press({ key: 'usage-cpu' }); await ui.redraw()
+    await ui.press({ key: 'usage-quit-42' }); h.reuse()
+    await ui.press({ key: 'usage-quit-42' }); await ui.redraw()
+    expect(actions(h.calls)).toHaveLength(0)
+  } finally { await ui.unmount() }
+})
+test('S7 failure is plain, stops the batch, and never retries on render or clock', async ($, on) => {
+  const h = cleanupHost(on); h.fail()
+  const ui = await mountCleanup($)
+  try {
+    await ui.press({ key: 'usage-disk' }); await ui.redraw()
+    await ui.press({ key: 'usage-clean' }); await ui.redraw()
+    expect(actions(h.calls)).toHaveLength(1)
+    expect(await ui.find({ type: 'Text', text: 'Could not clear this item.' })).not.toBe(undefined)
+    const count = h.calls.length
+    await (h.state._clock as ReturnType<typeof mock.clock>).advance(10000); await ui.redraw()
+    expect(h.calls).toHaveLength(count)
+    expect(await ui.find({ key: 'usage-clean' })).toBe(undefined)
+  } finally { await ui.unmount() }
+})
+test('non-macOS drawers keep readings and never scan or offer actions', async ($, on) => {
+  const h = cleanupHost(on, 'Linux')
+  const ui = await mountCleanup($)
+  try {
+    await ui.press({ key: 'usage-cpu' }); await ui.redraw()
+    expect(await ui.find({ type: 'Text', text: 'CPU 100% busy' })).not.toBe(undefined)
+    expect(h.calls).toEqual([['uname', '-s']])
+    expect(await ui.find({ key: 'usage-refresh' })).toBe(undefined)
+  } finally { await ui.unmount() }
+})

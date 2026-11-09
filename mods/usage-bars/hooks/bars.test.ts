@@ -304,9 +304,9 @@ test('system pills label each reading, preserve severity, and disable missing re
 
 test('drawer uses existing readings only and disappears without a panel or system', () => {
   expect(typeof desktop.drawer).toBe('function')
-  expect(desktop.drawer('cpu', sys, 1.15)?.alt).toBe('CPU, CPU 18% used')
-  expect(desktop.drawer('mem', sys, 1.15)?.alt).toBe('Memory, Memory 71% used')
-  expect(desktop.drawer('disk', sys, 1.15)?.alt).toBe('Disk, Disk 83% used')
+  expect(desktop.drawer('cpu', sys, 1.15)?.alt).toBe('CPU 18% busy')
+  expect(desktop.drawer('mem', sys, 1.15)?.alt).toBe('Memory 71% used')
+  expect(desktop.drawer('disk', sys, 1.15)?.alt).toBe('Disk 83% used, 170 GB free')
   expect(desktop.drawer(null, sys, 1.15)).toBe(null)
   expect(desktop.drawer('mem', null, 1.15)).toBe(null)
 })
