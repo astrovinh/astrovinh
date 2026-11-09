@@ -314,7 +314,9 @@ export function systemPills(sys: System | null) {
 
 /** The Button supplies the native focus ring and text; this SVG supplies its rounded skin. */
 export function pillSvg(scale: number): string {
-  return svgOpen(PILL_W, PILL_H, scale, 13) + '</svg>'
+  return svgOpen(PILL_W, PILL_H, scale, 13) +
+    `<rect x="0.5" y="0.5" width="${PILL_W - 1}" height="${PILL_H - 1}" rx="${PILL_H / 2}" fill="none" stroke="${INK}" stroke-opacity="0.45"/>` +
+    '</svg>'
 }
 
 /** The severity ring at the start of a pill, filled to the reading; a null reading draws only the track. */
@@ -323,7 +325,7 @@ export function pillRingSvg(percent: number | null, color: string): string {
 }
 
 export function spacerSvg(width: number, height = 1): string {
-  return svgOpen(width, height) + '</svg>'
+  return svgOpen(width, height) + `<rect width="${width}" height="${height}" fill="none"/>` + '</svg>'
 }
 
 /** Where the Week group sits in the band, in pixels, so the hover can be aimed at it alone. */
