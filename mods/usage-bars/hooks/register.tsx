@@ -9,6 +9,7 @@ import type { Ledger } from './ledger'
 import { parseCpu, parseDisk, parseMemory } from './system'
 import { cleanupActions, initialView } from './actions'
 import { drawerView } from './drawer'
+import { gaugeFor } from './gauge'
 
 const segments = atom({ plugin: 'usage-bars', key: 'segments' } as const, [] as Segment[])
 const window_ = atom({ plugin: 'usage-bars', key: 'window' } as const, 0)
@@ -179,7 +180,7 @@ export const register: Register = on => {
               <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
             </Box>
           )}
-          {!opened ? null : drawerView({ Box, Text, Button }, opened.alt, await read($, cleanupView) ?? initialView(), controls($), () => closeDrawer($), e.viewport?.columns)}
+          {!opened ? null : drawerView({ Box, Text, Button, Svg }, gaugeFor((await read($, openPanel))!, sys!), await read($, cleanupView) ?? initialView(), controls($), () => closeDrawer($), e.viewport?.columns)}
         </Box>
       )
     }

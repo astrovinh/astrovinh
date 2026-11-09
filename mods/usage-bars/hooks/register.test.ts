@@ -199,7 +199,7 @@ test('desktop pills open, switch, toggle and close the plain drawer through the 
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.
-    expect(await ui.find({ type: 'Text', text: 'Memory 71% used' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: '71% used' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe(null)
     await ui.redraw()
@@ -209,7 +209,7 @@ test('desktop pills open, switch, toggle and close the plain drawer through the 
     await ui.press({ key: 'usage-disk' })
     expect(state.panel).toBe('disk')
     await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: 'Disk 83% used, 170 GB free' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: '83% used, 170 GB free' })).not.toBe(undefined)
     await ui.press({ key: 'usage-close' })
     expect(state.panel).toBe(null)
     await ui.redraw()
@@ -246,11 +246,11 @@ test('missing readings are unpressable and losing system data hides an open draw
     expect(await ui.find({ type: 'Text', text: 'C \u2013' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })
     await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: 'Memory 71% used' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: '71% used' })).not.toBe(undefined)
     state.system = null
     await ui.redraw()
     expect((await ui.findAll({ type: 'Button' })).filter(b => b.text.trim())).toHaveLength(0)
-    expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(false)
+    expect(await ui.find({ type: 'Text', text: '71% used' })).toBe(undefined)
   } finally { await ui.unmount() }
 })
 
@@ -329,7 +329,7 @@ test('S1 render and clocks do not scan; a pill scans read-only and selection con
     await ui.press({ key: 'usage-disk' }); await ui.redraw()
     expect(h.calls.some(a => a[0] === 'du'), JSON.stringify(h.calls) + JSON.stringify(h.state.cleanupView)).toBe(true)
     expect(actions(h.calls)).toHaveLength(0)
-    const rows = await ui.findAll({ type: 'Button', text: /^\[x\]/ })
+    const rows = await ui.findAll({ type: 'Button', text: /^\u25cf/ })
     expect(rows).toHaveLength(2)
     await ui.press({ key: rows[1]!.key! }); await ui.redraw()
     await ui.press({ key: 'usage-clean' }); await ui.redraw()
@@ -344,11 +344,11 @@ test('S3/S4 worktree and simulator sections start unticked and each requires its
   const ui = await mountCleanup($)
   try {
     await ui.press({ key: 'usage-disk' }); await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: 'Old worktrees' })).not.toBe(undefined)
-    expect(await ui.find({ type: 'Text', text: 'Old simulators' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'OLD WORKTREES' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'OLD SIMULATORS' })).not.toBe(undefined)
     expect(await ui.find({ key: 'usage-remove-worktree' })).toBe(undefined)
     expect(await ui.find({ key: 'usage-remove-sim' })).toBe(undefined)
-    expect(await ui.findAll({ type: 'Button', text: /^\[ \]/ })).toHaveLength(2)
+    expect(await ui.findAll({ type: 'Button', text: /^\u25cb/ })).toHaveLength(2)
     await ui.press({ key: 'usage-clean' }); await ui.redraw()
     expect(actions(h.calls).every(a => a[0] === 'rm')).toBe(true)
     for (const [kind,id] of [['sim','sim-00000000-0000-0000-0000-000000000001'],['worktree','worktree-0']]) {
@@ -414,7 +414,7 @@ test('non-macOS drawers keep readings and never scan or offer actions', async ($
   const ui = await mountCleanup($)
   try {
     await ui.press({ key: 'usage-cpu' }); await ui.redraw()
-    expect(await ui.find({ type: 'Text', text: 'CPU 100% busy' })).not.toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: '100% busy' })).not.toBe(undefined)
     expect(h.calls).toEqual([['uname', '-s']])
     expect(await ui.find({ key: 'usage-refresh' })).toBe(undefined)
   } finally { await ui.unmount() }
