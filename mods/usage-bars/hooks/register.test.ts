@@ -13,6 +13,7 @@ function readings(on: On) {
     segments: [{ name: 'Used', kind: 'used', tokens: 100 }],
     contextPercent: 100,
     panel: null,
+    weekOpen: false,
     spend: { week: 1299, today: 0, sessionsToday: 1, session: 0 },
     system: { cpu: 100, cores: 1, memory: 100, memoryGb: 1, disk: { percent: 100, freeGb: 0 }, battery: null }
   }
@@ -178,8 +179,8 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
     try {
       const svgs = await ui.findAll({ type: 'Svg' })
       // A validation refusal must not masquerade as a zero-width successful render.
-      // Three pill rings always; the band from 46 columns, with the Week hover (two spacers and the card) from 59.
-      expect(svgs.length).toBe(columns < 46 ? 3 : columns < 59 ? 4 : 7)
+      // Three pill rings always; the band from 46 columns, with the Week press area (one spacer) from 59.
+      expect(svgs.length).toBe(columns < 46 ? 3 : columns < 59 ? 4 : 5)
       for (const svg of svgs.filter(s => Number(s.props.width) > 10)) {
         expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
       }
@@ -192,7 +193,7 @@ test('desktop pills open, switch, toggle and close the read-only drawer through 
   state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['C 18%', 'M 71%', 'D 83%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim()).filter(Boolean)).toEqual(['C 18%', 'M 71%', 'D 83%'])
     await ui.press({ key: 'usage-mem' })
     expect(state.panel).toBe('mem')
     await ui.redraw() // The mocked state store does not send the host's subscription notification.
@@ -238,7 +239,7 @@ test('missing readings are unpressable and losing system data hides an open draw
   state.system = { cpu: null, cores: 8, memory: 71, memoryGb: 32, disk: null, battery: null }
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
   try {
-    expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['M 71%'])
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim()).filter(Boolean)).toEqual(['M 71%'])
     expect(await ui.find({ key: 'usage-cpu' })).toBe(undefined)
     expect(await ui.find({ type: 'Text', text: 'C \u2013' })).not.toBe(undefined)
     await ui.press({ key: 'usage-mem' })
@@ -246,7 +247,24 @@ test('missing readings are unpressable and losing system data hides an open draw
     expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(true)
     state.system = null
     await ui.redraw()
-    expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
+    expect((await ui.findAll({ type: 'Button' })).filter(b => b.text.trim())).toHaveLength(0)
     expect((await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).includes('Memory 71% used'))).toBe(false)
   } finally { await ui.unmount() }
 })
+
+test('pressing Week opens a one-line detail card under the band and pressing again closes it', async ($, on) => {
+  const state = readings(on)
+  const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
+  try {
+    const open = async () => (await ui.findAll({ type: 'Svg' })).some(s => String(s.props.alt).startsWith('Today'))
+    expect(await open()).toBe(false)
+    await ui.press({ key: 'usage-week' })
+    expect(state.weekOpen).toBe(true)
+    await ui.redraw()
+    expect(await open()).toBe(true)
+    await ui.press({ key: 'usage-week' })
+    await ui.redraw()
+    expect(await open()).toBe(false)
+  } finally { await ui.unmount() }
+})
+

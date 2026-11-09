@@ -20,6 +20,7 @@ declare module 'claude-code' {
       spend: Spend | null
       system: System | null
       panel: 'cpu' | 'mem' | 'disk' | null
+      weekOpen: boolean
     }
   }
 }

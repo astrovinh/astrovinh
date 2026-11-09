@@ -15,6 +15,7 @@ const limits = atom({ plugin: 'usage-bars', key: 'limits' } as const, [] as Limi
 const spend = atom({ plugin: 'usage-bars', key: 'spend' } as const, null as Spend | null)
 const system = atom({ plugin: 'usage-bars', key: 'system' } as const, null as System | null)
 const openPanel = atom({ plugin: 'usage-bars', key: 'panel' } as const, null as Panel | null)
+const weekOpen = atom({ plugin: 'usage-bars', key: 'weekOpen' } as const, false)
 
 const SYSTEM_MS = 10_000
 
@@ -114,7 +115,8 @@ export const register: Register = on => {
       if (!band.width && !sys) return next(e)
       const { scale } = band.layout
       const hover = weekHover(band.layout)
-      const detail = detailSvg(input, scale, hover ? band.width - hover.left : band.width)
+      const detail = detailSvg(input, scale, band.width)
+      const weekShown = await read($, weekOpen)
       const opened = drawer(await read($, openPanel), sys, scale, band.width)
       const pills = systemPills(sys).map(pill => (
         <Box key={`pill-${pill.panel}`} flexDirection="row" alignItems="center" marginRight={1}>
@@ -136,14 +138,11 @@ export const register: Register = on => {
             <Box flexShrink={0}>
               {band.width ? <Svg source={band.source} alt={band.alt} width={band.width} height={band.height} /> : null}
               {!hover ? null : (
-                <Box key="usage-week-hover" position="absolute" top={0} left={0} flexDirection="row">
+                <Box key="usage-week-hit" position="absolute" top={0} left={0} height="100%" flexDirection="row" alignItems="center">
                   <Svg source={spacerSvg(hover.left)} alt="" width={hover.left} height={1} />
-                  <Box flexDirection="column">
-                    <Svg source={spacerSvg(hover.width, hover.height)} alt="" width={hover.width} height={hover.height} />
-                    <Box display="none" hover={{ display: 'flex' }}>
-                      <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
-                    </Box>
-                  </Box>
+                  <Button key="usage-week" plain onPress={async () => { await update($, weekOpen, open => !open) }}>
+                    <Text>{'\u00a0'.repeat(Math.max(1, Math.round(hover.width / 7)))}</Text>
+                  </Button>
                 </Box>
               )}
             </Box>
@@ -153,6 +152,11 @@ export const register: Register = on => {
               </Box>
             )}
           </Box>
+          {!weekShown || !hover ? null : (
+            <Box key="usage-week-detail" alignSelf="flex-start">
+              <Svg source={detail.source} alt={detail.alt} width={detail.width} height={detail.height} />
+            </Box>
+          )}
           {!opened ? null : (
             <Box key="usage-drawer" flexDirection="column" alignSelf="flex-start">
               <Svg source={opened.source} alt={opened.alt} width={opened.width} height={opened.height} />
