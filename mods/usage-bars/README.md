@@ -8,7 +8,7 @@ A Claude Code mod that draws one row above the prompt, always visible:
 
 Bars and rings turn amber at 60% and red at 85%. A dotted ring means that machine has not reported for 90 seconds.
 
-On the desktop, the band shows W, All and C M D only. The terminal band still shows Day, Week and Ctx.
+On the desktop the band shows W, All and C M D. The terminal band shows Week, the dollars and the CPU, Mem and Disk text.
 
 On desktop, click the CPU, Mem or Disk pill to look at cleanup choices. On macOS, a separate button runs the action. Other systems keep the read-only view.
 The desktop band stays on one line at any width: the bar shrinks first, then the dollar figure goes, then the machine rings. W and the C, M and D readings always show.

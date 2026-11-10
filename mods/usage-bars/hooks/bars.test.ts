@@ -3,7 +3,7 @@ import * as bars from './bars'
 import { allocate, bandSvg, contextCells, desktopLayout, detailSvg, layoutWidth, limitCells, pillHits, terminalLayout, untilReset, usd, weekHover } from './bars'
 import type { TerminalLayout } from './bars'
 
-const full: TerminalLayout = { bar: 10, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
+const full: TerminalLayout = { bar: 10, labels: 'long', gap: 3, spend: true, system: true, panels: ['week'], bars: true }
 const tiers: TerminalLayout[] = [
   full,
   { ...full, system: false },
@@ -11,7 +11,6 @@ const tiers: TerminalLayout[] = [
   { ...full, bar: 6, gap: 2, spend: false, system: false },
   { ...full, bar: 4, labels: 'short', gap: 2, spend: false, system: false },
   { ...full, bar: 0, labels: 'short', gap: 2, spend: false, system: false, bars: false },
-  { ...full, bar: 0, labels: 'short', gap: 2, spend: false, system: false, panels: ['day'], bars: false },
   { ...full, bar: 0, labels: 'short', gap: 2, spend: false, system: false, panels: [], bars: false }
 ]
 
@@ -55,9 +54,9 @@ test('the terminal keeps the full band before its width is measured', () => {
 })
 
 test('each band tier counts its labels, bars, percentages, gaps, dollars and system readings', () => {
-  expect(tiers.map(t => layoutWidth(t, 5))).toEqual([106, 72, 57, 50, 37, 22, 6, 0])
-  expect(layoutWidth(full, 0)).toBe(98)
-  expect(layoutWidth(full, 6)).toBe(107)
+  expect(tiers.map(t => layoutWidth(t, 5))).toEqual([62, 28, 23, 16, 11, 6, 0])
+  expect(layoutWidth(full, 0)).toBe(54)
+  expect(layoutWidth(full, 6)).toBe(63)
 })
 
 test('each terminal tier begins exactly when it fits with one spare cell', () => {
@@ -71,33 +70,30 @@ test('each terminal tier begins exactly when it fits with one spare cell', () =>
 })
 
 test('unknown dollars use no space and retain the richer tier when widths tie', () => {
-  expect(terminalLayout(65, 0)).toEqual(tiers[1])
-  expect(terminalLayout(51, 0)).toEqual(tiers[2])
-  expect(terminalLayout(50, 0)).toEqual(tiers[4])
+  expect(terminalLayout(21, 0)).toEqual(tiers[1])
+  expect(terminalLayout(17, 0)).toEqual(tiers[2])
+  expect(terminalLayout(16, 0)).toEqual(tiers[4])
 })
 
-test('a 110-column terminal gets the full band', () => {
-  expect(terminalLayout(110, 5)).toEqual(tiers[0])
+test('a 63-column terminal gets the full band, with Week only', () => {
+  expect(terminalLayout(63, 5)).toEqual(tiers[0])
+  expect(terminalLayout(200, 5).panels).toEqual(['week'])
 })
 
-test('a 60-column terminal keeps six-cell bars and fitting dollars without system readouts', () => {
-  expect(terminalLayout(60, 5)).toEqual(tiers[2])
+test('a 24-column terminal keeps a six-cell bar and fitting dollars without system readouts', () => {
+  expect(terminalLayout(24, 5)).toEqual(tiers[2])
 })
 
-test('a 51-column terminal keeps six-cell bars but drops the dollars', () => {
-  expect(terminalLayout(51, 5)).toEqual(tiers[3])
+test('a 17-column terminal keeps a six-cell bar but drops the dollars', () => {
+  expect(terminalLayout(17, 5)).toEqual(tiers[3])
 })
 
-test('a 30-column terminal shows only percentages', () => {
-  expect(terminalLayout(30, 5)).toEqual(tiers[5])
-})
-
-test('a 12-column terminal shows only the Day percentage', () => {
-  expect(terminalLayout(12, 5)).toEqual(tiers[6])
+test('a 7-column terminal shows only the W percentage', () => {
+  expect(terminalLayout(7, 5)).toEqual(tiers[5])
 })
 
 test('a terminal narrower than seven columns draws nothing', () => {
-  for (let columns = 1; columns < 7; columns++) expect(terminalLayout(columns, 5)).toEqual(tiers[7])
+  for (let columns = 1; columns < 7; columns++) expect(terminalLayout(columns, 5)).toEqual(tiers[6])
 })
 
 test('allocate always fills the width', () => {

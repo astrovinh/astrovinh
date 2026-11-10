@@ -90,8 +90,8 @@ function rowText(node: RenderNode): string {
 }
 
 for (const [columns, expected] of [
-  [30, 'D 100%  W 100%  C 100%'],
-  [12, 'D 100%']
+  [10, 'W 100%'],
+  [7, 'W 100%']
 ] as const) {
   test(`a ${columns}-column terminal renders only the selected percentages`, async ($, on) => {
     readings(on)
@@ -154,7 +154,8 @@ test('an unmeasured terminal keeps the full band', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'terminal', component: 'AbovePrompt', props })
   try {
     const tree = await ui.drawn()
-    expect(rowWidth(tree)).toBe(106)
+    expect(rowWidth(tree)).toBe(62)
+    expect(rowText(tree)).not.toMatch(/Day|Ctx/)
     expect(rowText(tree)).toContain('CPU 100%   Mem 100%   Disk 100%')
     checkNoWrap(tree)
   } finally {
@@ -162,7 +163,7 @@ test('an unmeasured terminal keeps the full band', async ($, on) => {
   }
 })
 
-test('only the pills show when even Day cannot fit at the minimum scale', async ($, on) => {
+test('only the pills show when even Week cannot fit at the minimum scale', async ($, on) => {
   readings(on)
   const ui = await $.ui.mount({
     plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props,
@@ -259,18 +260,19 @@ test('desktop All opens the machines drawer, and a pill closes it again', async 
   } finally { await ui.unmount() }
 })
 
-// Captured from the original hook in an isolated baseline copy, before desktop edits.
 // FNV-1a over the entire serialized tree pins every terminal node, prop and text byte.
+// Re-captured 9 Nov 2026 when Day and Ctx left the terminal band; the rows read
+// "Week <10-cell bar> 100%   $1.2k   CPU 100%   Mem 100%   Disk 100%" at 80+ columns down to "W <4-cell bar> 100%" at 12.
 function terminalBytes(node: RenderNode): number {
   let hash = 2166136261
   for (const ch of JSON.stringify(node)) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619)
   return hash >>> 0
 }
 for (const [columns, snapshot] of [
-  [120, 847387973], [80, 2191326550], [60, 3391757860], [40, 4197371263],
-  [30, 4082337182], [20, 329619674], [12, 329619674]
+  [120, 3912503222], [80, 3912503222], [60, 3169434595], [40, 3169434595],
+  [30, 3169434595], [20, 2787173288], [12, 1883607158]
 ] as const) {
-  test(`terminal tree bytes match the original at ${columns} columns`, async ($, on) => {
+  test(`terminal tree bytes match the Week-only band at ${columns} columns`, async ($, on) => {
     readings(on)
     const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'terminal', component: 'AbovePrompt', props, viewport: { columns, rows: 24 } })
     try { expect(terminalBytes(await ui.drawn())).toBe(snapshot) }

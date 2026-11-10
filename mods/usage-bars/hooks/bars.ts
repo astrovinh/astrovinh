@@ -30,7 +30,8 @@ export function layoutWidth(layout: TerminalLayout, spendChars: number): number 
 
 /** Prefer the richest band that fits, keeping one terminal cell spare. */
 export function terminalLayout(columns: number | undefined, spendChars: number): TerminalLayout {
-  const full: TerminalLayout = { bar: BAR, labels: 'long', gap: 3, spend: true, system: true, panels: ['day', 'week', 'ctx'], bars: true }
+  // Week only: Day and Ctx left the band on 9 Nov 2026, on both surfaces.
+  const full: TerminalLayout = { bar: BAR, labels: 'long', gap: 3, spend: true, system: true, panels: ['week'], bars: true }
   if (columns === undefined) return full
   const compact: TerminalLayout = { ...full, bar: 6, gap: 2, system: false }
   const short: TerminalLayout = { ...compact, bar: 4, labels: 'short', spend: false }
@@ -41,8 +42,7 @@ export function terminalLayout(columns: number | undefined, spendChars: number):
     compact,
     { ...compact, spend: false },
     short,
-    percentages,
-    { ...percentages, panels: ['day'] }
+    percentages
   ]
   return candidates.find(layout => layoutWidth(layout, spendChars) <= columns - 1) ?? { ...percentages, panels: [] }
 }
