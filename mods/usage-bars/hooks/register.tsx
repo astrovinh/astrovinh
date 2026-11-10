@@ -95,10 +95,13 @@ async function askMachines($: any) {
   asking = true
   try {
     const cfg = config
+    const notes: string[] = []
     await Promise.all(cfg.ssh.filter(m => m.name !== cfg.name).map(async m => {
-      const c = await askOverSsh((argv, init) => $.process.run(argv, init), m.name, m.host, () => $.clock.now())
+      const c = await askOverSsh((argv, init) => $.process.run(argv, init), m.name, m.host, () => $.clock.now(), line => notes.push(line))
       if (c) asked.set(m.name, c)
     }))
+    // Local only (.debug is git-ignored): the last round's outcome per machine, for tracing a ring that stays off.
+    await $.fs.write(`${$.plugin.root}/.debug/machines.txt`, `${new Date(await $.clock.now()).toISOString()}\n${notes.join('\n')}\n`).catch(() => {})
   } finally {
     asking = false
   }

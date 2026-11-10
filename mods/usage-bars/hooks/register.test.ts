@@ -163,18 +163,15 @@ test('an unmeasured terminal keeps the full band', async ($, on) => {
   }
 })
 
-test('only the pills show when even Week cannot fit at the minimum scale', async ($, on) => {
-  readings(on)
-  const ui = await $.ui.mount({
-    plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props,
-    viewport: { columns: 12, rows: 24 }
-  })
+test('a tight session keeps W and the machine rings and hides C M D', async ($, on) => {
+  const state = readings(on)
+  state.machines = [{ name: '26', cpu: 10, memory: 20, disk: 30, at: 0 }, { name: 'PC', cpu: 50, memory: 10, disk: 5, at: 0 }]
+  const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 45, rows: 24 } })
   try {
-    const svgs = await ui.findAll({ type: 'Svg' })
-    // Windows onto the pills-only picture, one either side of each percent button.
-    expect(svgs).toHaveLength(4)
-    expect(String(svgs[0]!.props.source)).not.toContain('clipPath id="c0"')
-    expect(String(svgs[0]!.props.source)).toContain('>M</text>')
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim())).toEqual(['W', 'All'])
+    const sources = (await ui.findAll({ type: 'Svg' })).map(s => String(s.props.source)).join('')
+    expect(sources).toContain('>PC</text>')
+    expect(sources).not.toContain('>M</text>')
   } finally {
     await ui.unmount()
   }
@@ -190,15 +187,15 @@ for (const columns of [1, 12, 40, 60, 100, 125, 160, 300]) {
       // Windows onto one band picture with a native button in the row between each pair: W when Week fits, and each pill's percent.
       const layout = desktopLayout(columns)
       const buttons = await ui.findAll({ type: 'Button' })
-      expect(buttons).toHaveLength(3 + (weekHover(layout) ? 1 : 0))
-      expect(svgs.length).toBe(buttons.length + 1)
+      expect(buttons).toHaveLength((layout.system ? 3 : 0) + (weekHover(layout) ? 1 : 0))
+      expect(svgs.length).toBe(layout.width ? buttons.length + 1 : 0)
       // The desktop skips a picture with an empty description.
       for (const svg of svgs) expect(String(svg.props.alt).trim()).not.toBe('')
       // Nothing is laid over the pictures: an overlay never draws on the desktop.
       expect(JSON.stringify(await ui.drawn())).not.toContain('"absolute"')
       // Below the pills' own width nothing fits; the pills still show at their smallest.
       for (const svg of svgs) {
-        expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(Math.max(columns * 7 - 16, desktopLayout(1).width))
+        expect(Number(svg.props.width), `SVG ${svg.props.alt}`).toBeLessThanOrEqual(columns * 7 - 16)
       }
     } finally { await ui.unmount() }
   })

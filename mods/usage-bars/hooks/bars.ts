@@ -204,31 +204,31 @@ type DesktopLayout = {
 
 /**
  * One line at any width: Week, then the machine rings, then the C M D pills. The bar shrinks first,
- * then dollars go, then the machine rings, never W or the pills. The band then widens to the session
- * (up to MODULE_MAX_PX), the pills at the right edge and the machine rings centred in the room before them.
+ * then dollars go, then the C M D pills, then the machine rings; W stays to the last. The band then
+ * widens to the session (up to MODULE_MAX_PX), the pills at the right edge and the machine rings
+ * centred in the room before them.
  */
 export function desktopLayout(columns: number | undefined, spend = true, system = true, machines = 0): DesktopLayout {
   const scale = bandScale(columns)
   const available = columns === undefined ? Infinity : columns * 7 - 16
-  const pills = system ? PILLS_W : 0
-  const budget = available / scale - pills
   const week = ['week'] as DesktopLayout['panels']
   const candidates = [
-    { panels: week, spend, machines },
-    { panels: week, spend: false, machines },
-    { panels: week, spend: false, machines: 0 }
+    { panels: week, spend, machines, system },
+    { panels: week, spend: false, machines, system },
+    { panels: week, spend: false, machines, system: false },
+    { panels: week, spend: false, machines: 0, system: false }
   ]
   for (const c of candidates) {
     const n = c.panels.length
+    const pills = c.system ? PILLS_W : 0
     const fixed = PAD * 2 + n * GROUP_FIXED + (n - 1) * GROUP_GAP + (c.spend ? GROUP_GAP + COST_W : 0) + (c.machines ? GROUP_GAP + machinesW(c.machines) : 0)
-    const barW = Math.min(BAR_MAX, Math.floor((budget - fixed) / n))
-    if (barW >= BAR_MIN) return widen({ ...c, system, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: 0, machinesX: 0 }, available)
+    const barW = Math.min(BAR_MAX, Math.floor((available / scale - pills - fixed) / n))
+    if (barW >= BAR_MIN) return widen({ ...c, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: 0, machinesX: 0 }, available)
   }
-  return widen({ panels: [], spend: false, system, barW: BAR_MIN, scale, width: system ? (PAD * 2 + PILLS_W - GROUP_GAP) * scale : 0, pillsX: 0, machines: 0, machinesX: 0 }, available)
+  return { panels: [], spend: false, system: false, barW: BAR_MIN, scale, width: 0, pillsX: 0, machines: 0, machinesX: 0 }
 }
 
 function widen(l: DesktopLayout, available: number): DesktopLayout {
-  // With only the pills left there is nothing to put the spare room after, so the pills stay their own width and centre.
   if (!l.width || !l.panels.length) return l
   const width = Math.max(l.width, Math.min(available, MODULE_MAX_PX))
   const end = l.panels.length * (GROUP_FIXED + l.barW + GROUP_GAP) - GROUP_GAP + (l.spend ? GROUP_GAP + COST_W : 0)

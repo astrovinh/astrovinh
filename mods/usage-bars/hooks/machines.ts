@@ -119,13 +119,23 @@ export function parseRemote(name: string, out: string, now: number): Card {
   return { name, at: now, cpu, memory, disk: parseDisk(s.df ?? '') }
 }
 
-type Run = (argv: string[], init?: { timeoutMs?: number }) => Promise<{ exitCode: number; stdout: string }>
+type Run = (argv: string[], init?: { timeoutMs?: number }) => Promise<{ exitCode: number; stdout: string; stderr?: string }>
 type Fs = { list: (path: string) => Promise<{ name: string; kind: string }[]>; read: (path: string) => Promise<string> }
 
-/** One machine over ssh; null when it cannot be reached, so its ring shows off rather than a stale reading. */
-export async function askOverSsh(run: Run, name: string, host: string, now: () => Promise<number>): Promise<Card | null> {
-  const r = await run(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4', host, REMOTE], { timeoutMs: 10_000 }).catch(() => null)
-  return r && r.exitCode === 0 ? parseRemote(name, r.stdout, await now()) : null
+/** One machine over ssh; null when it cannot be reached, so its ring shows off rather than a stale reading. `note` hears why, for the local log. */
+export async function askOverSsh(run: Run, name: string, host: string, now: () => Promise<number>, note: (line: string) => void = () => {}): Promise<Card | null> {
+  const r = await run(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=4', host, REMOTE], { timeoutMs: 10_000 }).catch((e: unknown) => {
+    note(`${name}: ssh did not finish: ${e instanceof Error ? e.message : String(e)}`)
+    return null
+  })
+  if (!r) return null
+  if (r.exitCode !== 0) {
+    note(`${name}: exit ${r.exitCode}: ${(r.stderr ?? '').trim().split('\n')[0]}`)
+    return null
+  }
+  const card = parseRemote(name, r.stdout, await now())
+  note(`${name}: ok cpu ${card.cpu === null ? '-' : Math.round(card.cpu)} memory ${card.memory === null ? '-' : Math.round(card.memory)} (${r.stdout.length} bytes)`)
+  return card
 }
 
 /** Every card one level under the inbox, in `<folder>/machine-load/<name>.json`. */

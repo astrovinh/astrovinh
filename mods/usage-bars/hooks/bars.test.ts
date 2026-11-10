@@ -242,52 +242,45 @@ test('the band keeps one text scale and widens to the session, centred room goin
     expect(desktop.bandScale(columns)).toBe(1.15)
     const layout = desktop.desktopLayout(columns)
     const available = columns * 7 - 16
-    // As wide as the session allows, up to the cap, never narrower than its content.
-    if (layout.panels.length) {
-      expect(layout.width).toBe(Math.min(available, desktop.MODULE_MAX_PX))
-    } else {
-      // Pills alone keep their own width, so the centred band has even room on both sides.
-      expect(layout.width).toBe(desktop.desktopLayout(1).width)
-      expect(layout.pillsX).toBe(0)
-    }
+    // As wide as the session allows, up to the cap; with not even W fitting, the band steps aside.
+    expect(layout.width).toBe(layout.panels.length ? Math.min(available, desktop.MODULE_MAX_PX) : 0)
     // The pills end one pad short of the right edge.
-    expect(Math.round((12 + layout.pillsX + 170 + 12) * layout.scale)).toBe(Math.round(layout.width))
+    if (layout.system) expect(Math.round((12 + layout.pillsX + 170 + 12) * layout.scale)).toBe(Math.round(layout.width))
   }
   expect(desktop.desktopLayout(300).width).toBe(desktop.MODULE_MAX_PX)
   expect(desktop.desktopLayout(100).width).toBe(100 * 7 - 16)
 })
 
-test('desktop drawn width fits every pane, or is the pills alone at their smallest, without shrinking text', () => {
+test('desktop drawn width fits every pane without shrinking text, and steps aside when not even W fits', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
   for (let columns = 1; columns <= 300; columns++) {
     const layout = desktop.desktopLayout(columns)
     const band = bandSvg(input, columns)
     expect(layout.scale).toBeGreaterThanOrEqual(1.15)
-    expect(band.width <= Math.max(columns * 7 - 16, desktop.desktopLayout(1).width), `drawn width at ${columns} columns`).toBe(true)
-    expect(band.width).toBeGreaterThan(0)
+    expect(band.width <= Math.max(0, columns * 7 - 16), `drawn width at ${columns} columns`).toBe(true)
+    // W alone needs about 18 columns; below that the band steps aside for the next hook.
+    expect(band.width > 0).toBe(columns >= 18)
     expect(band.width).toBe(layout.width)
   }
 })
 
-test('desktop fits one line: the bar shrinks first, then dollars, then the machine rings, never W or the pills', () => {
+test('when tight, dollars go first, then C M D, then the machine rings; W stays to the last', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
   expect(desktop.desktopLayout(160, true, true, 5)).toMatchObject({ spend: true, system: true, barW: 56, panels: ['week'], machines: 5 })
-  expect(desktop.desktopLayout(82, true, true, 5)).toMatchObject({ spend: true, panels: ['week'], machines: 5 })
-  expect(desktop.desktopLayout(81, true, true, 5)).toMatchObject({ spend: false, panels: ['week'], machines: 5 })
-  expect(desktop.desktopLayout(72, true, true, 5)).toMatchObject({ spend: false, panels: ['week'], machines: 5 })
-  expect(desktop.desktopLayout(71, true, true, 5)).toMatchObject({ spend: false, panels: ['week'], machines: 0 })
-  expect(desktop.desktopLayout(49, true, true, 5)).toMatchObject({ panels: ['week'], machines: 0 })
-  expect(desktop.desktopLayout(48, true, true, 5)).toMatchObject({ system: true, panels: [], machines: 0 })
+  expect(desktop.desktopLayout(82, true, true, 5)).toMatchObject({ spend: true, system: true, machines: 5 })
+  expect(desktop.desktopLayout(81, true, true, 5)).toMatchObject({ spend: false, system: true, machines: 5 })
+  expect(desktop.desktopLayout(72, true, true, 5)).toMatchObject({ spend: false, system: true, machines: 5 })
+  expect(desktop.desktopLayout(71, true, true, 5)).toMatchObject({ spend: false, system: false, machines: 5, panels: ['week'] })
+  expect(desktop.desktopLayout(42, true, true, 5)).toMatchObject({ system: false, machines: 5, panels: ['week'] })
+  expect(desktop.desktopLayout(41, true, true, 5)).toMatchObject({ system: false, machines: 0, panels: ['week'] })
+  expect(desktop.desktopLayout(18, true, true, 5)).toMatchObject({ system: false, machines: 0, panels: ['week'] })
+  expect(desktop.desktopLayout(17, true, true, 5)).toMatchObject({ panels: [], width: 0 })
   for (let columns = 1; columns <= 300; columns++) {
     const l = desktop.desktopLayout(columns, true, true, 5)
-    // Rings never come without W, and W never goes while a ring stays.
+    // C M D never show without the rings, and the rings never without W.
+    if (l.system) expect(l.machines).toBe(5)
     if (l.machines) expect(l.panels).toEqual(['week'])
-  }
-  for (let columns = 1; columns <= 300; columns++) {
-    const layout = desktop.desktopLayout(columns)
-    expect(layout.system).toBe(true)
-    // The pills are inside the band now, so the whole drawn width is the band's.
-    expect(layout.width).toBeLessThanOrEqual(Math.max(columns * 7 - 16, desktop.desktopLayout(1).width))
+    expect(l.width).toBeLessThanOrEqual(Math.max(0, columns * 7 - 16))
   }
 })
 
@@ -331,7 +324,7 @@ test('the hover area covers only the Week group', () => {
   const groupW = 24 + layout.barW + 5 + 30
   expect(Math.round(hover.left)).toBe(Math.round(12 * layout.scale))
   expect(Math.round(hover.width)).toBe(Math.round(groupW * layout.scale))
-  expect(weekHover(desktopLayout(20))).toBe(null)
+  expect(weekHover(desktopLayout(10))).toBe(null)
 })
 
 test('the band draws each pill letter in a severity ring, and only pills with a reading are pressable', () => {
