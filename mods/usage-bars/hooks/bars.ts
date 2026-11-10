@@ -162,6 +162,14 @@ const PILL_R = 7
 const PILL_TEXT = PILL_R * 2 + 6
 /** The three pills drawn at the band's right end, after one group gap. */
 const PILLS_W = GROUP_GAP + PILL_W * 3 + PILL_GAP * 2
+/** The machine rings: the same ring as a pill, after the native "All" label, with no percent. */
+const ALL_LABEL = 'All'
+const MACHINE_W = PILL_R * 2 + 2
+const MACHINE_GAP = 7
+const ALL_W = 22
+function machinesW(n: number): number {
+  return n ? ALL_W + n * MACHINE_W + (n - 1) * MACHINE_GAP : 0
+}
 
 export const BAND_W = PAD * 2 + (GROUP_FIXED + BAR_MAX) * 3 + GROUP_GAP * 4 + COST_W
 export const BAND_H = 42
@@ -189,39 +197,44 @@ type DesktopLayout = {
   width: number
   /** Where the pills start, in band units. */
   pillsX: number
+  /** How many machine rings fit, and where their "All" label starts, in band units. */
+  machines: number
+  machinesX: number
 }
 
 /**
- * One line at any width: the bars shrink first, then dollars, then panels go, never the pills.
- * The band then widens to the session (up to MODULE_MAX_PX), with the spare room before the pills,
- * so the pills sit at the right edge and the drawer below can share the same width.
+ * One line at any width: Week, then the machine rings, then the C M D pills. The bar shrinks first,
+ * then dollars go, then the machine rings, never W or the pills. The band then widens to the session
+ * (up to MODULE_MAX_PX), the pills at the right edge and the machine rings centred in the room before them.
  */
-export function desktopLayout(columns: number | undefined, spend = true, system = true): DesktopLayout {
+export function desktopLayout(columns: number | undefined, spend = true, system = true, machines = 0): DesktopLayout {
   const scale = bandScale(columns)
   const available = columns === undefined ? Infinity : columns * 7 - 16
   const pills = system ? PILLS_W : 0
   const budget = available / scale - pills
-  const all = ['day', 'week', 'ctx'] as DesktopLayout['panels']
+  const week = ['week'] as DesktopLayout['panels']
   const candidates = [
-    { panels: all, spend },
-    { panels: all, spend: false },
-    { panels: ['day', 'week'] as DesktopLayout['panels'], spend: false },
-    { panels: ['day'] as DesktopLayout['panels'], spend: false }
+    { panels: week, spend, machines },
+    { panels: week, spend: false, machines },
+    { panels: week, spend: false, machines: 0 }
   ]
   for (const c of candidates) {
     const n = c.panels.length
-    const fixed = PAD * 2 + n * GROUP_FIXED + (n - 1) * GROUP_GAP + (c.spend ? GROUP_GAP + COST_W : 0)
+    const fixed = PAD * 2 + n * GROUP_FIXED + (n - 1) * GROUP_GAP + (c.spend ? GROUP_GAP + COST_W : 0) + (c.machines ? GROUP_GAP + machinesW(c.machines) : 0)
     const barW = Math.min(BAR_MAX, Math.floor((budget - fixed) / n))
-    if (barW >= BAR_MIN) return widen({ ...c, system, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: 0 }, available)
+    if (barW >= BAR_MIN) return widen({ ...c, system, barW, scale, width: (fixed + n * barW + pills) * scale, pillsX: 0, machinesX: 0 }, available)
   }
-  return widen({ panels: [], spend: false, system, barW: BAR_MIN, scale, width: system ? (PAD * 2 + PILLS_W - GROUP_GAP) * scale : 0, pillsX: 0 }, available)
+  return widen({ panels: [], spend: false, system, barW: BAR_MIN, scale, width: system ? (PAD * 2 + PILLS_W - GROUP_GAP) * scale : 0, pillsX: 0, machines: 0, machinesX: 0 }, available)
 }
 
 function widen(l: DesktopLayout, available: number): DesktopLayout {
   // With only the pills left there is nothing to put the spare room after, so the pills stay their own width and centre.
   if (!l.width || !l.panels.length) return l
   const width = Math.max(l.width, Math.min(available, MODULE_MAX_PX))
-  return { ...l, width, pillsX: l.system ? width / l.scale - PAD * 2 - (PILLS_W - GROUP_GAP) : 0 }
+  const end = l.panels.length * (GROUP_FIXED + l.barW + GROUP_GAP) - GROUP_GAP + (l.spend ? GROUP_GAP + COST_W : 0)
+  const pillsX = l.system ? width / l.scale - PAD * 2 - (PILLS_W - GROUP_GAP) : width / l.scale - PAD * 2
+  const room = pillsX - end - GROUP_GAP * 2
+  return { ...l, width, pillsX: l.system ? pillsX : 0, machinesX: end + GROUP_GAP + Math.max(0, (room - machinesW(l.machines)) / 2) }
 }
 
 export function esc(s: string): string {
@@ -262,10 +275,14 @@ function limitGroup(i: number, label: string, r: Reading | undefined, barW: numb
   return group(i, label, [{ width: used.width, color: used.color! }], r.percentUsed, barW)
 }
 
-import type { Spend, System } from '../types'
+import type { MachineRow, Spend, System } from '../types'
+export type { MachineRow }
 import { ring } from './system'
 
-type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; spend: Spend | null; system: System | null; now: number }
+/** One ring per machine: how busy it is now, or off when its last reading is too old. */
+export type MachineRing = { name: string; load: number | null; off: boolean }
+
+type BandInput = { day?: Reading; week?: Reading; segments: Seg[]; contextPercent: number | null; spend: Spend | null; system: System | null; now: number; machines?: MachineRing[] }
 
 /** Dollars cut short, never rounded up: $0.42, $3.4, $12, $1.2k, $12k. */
 export function usd(n: number): string {
@@ -277,28 +294,27 @@ export function usd(n: number): string {
   return `$${cut(n / 1000, 0)}k`
 }
 
-/** Day, Week and Ctx share one row; native pill buttons sit over its right side. */
+/** Week, the machine rings and the C M D pills share one row. */
 export function bandSvg(a: BandInput, columns?: number): { source: string; alt: string; width: number; height: number; layout: DesktopLayout; inner: string } {
-  const layout = desktopLayout(columns, a.spend !== null, a.system !== null)
-  const { cells } = contextCells(a.segments, layout.barW)
-  const ctxFills = cells.map(c => ({ width: c.width, color: c.color ?? (c.glyph === '\u2500' ? BUFFER : 'transparent') }))
+  const machines = a.machines ?? []
+  const layout = desktopLayout(columns, a.spend !== null, a.system !== null, machines.length)
 
   const pct = (r?: Reading) => (r ? `${Math.round(r.percentUsed)}%` : 'no reading')
   const alt =
-    `Day ${pct(a.day)}, Week ${pct(a.week)}, Context ${a.contextPercent === null ? 'no reading' : `${Math.round(a.contextPercent)}%`}` +
+    `Week ${pct(a.week)}` +
     (a.spend === null ? '' : `, This week ${usd(a.spend.week)}`) +
+    (layout.machines ? machines.map(m => `, ${m.name} ${m.off || m.load === null ? 'off' : `${Math.round(m.load)}%`}`).join('') : '') +
     sysItems(a.system).map(i => `, ${i.name} ${Math.round(i.percent)}%`).join('')
 
   const width = layout.width
   const height = BAND_H * layout.scale
   const baseWidth = width / layout.scale
-  const groups = layout.panels.map((panel, i) => panel === 'ctx'
-    ? group(i, 'Ctx', ctxFills, a.segments.length ? a.contextPercent : null, layout.barW)
-    // Week's letter is the native button laid over this spot (see weekHover), so the picture leaves it out.
-    : limitGroup(i, panel === 'day' ? 'D' : '', panel === 'day' ? a.day : a.week, layout.barW)).join('')
+  // Week's letter is the native button in the row at this spot (see bandParts), so the picture leaves it out.
+  const groups = layout.panels.map((_, i) => limitGroup(i, '', a.week, layout.barW)).join('')
   const inner =
     `<g transform="translate(${PAD} ${(BAND_H - H) / 2})">` + groups +
     (!layout.spend || a.spend === null ? '' : `<text x="${layout.panels.length * (GROUP_FIXED + layout.barW + GROUP_GAP)}" y="10.5" fill="${INK}">${usd(a.spend.week)}</text>`) +
+    (layout.machines ? machinesMarkup(machines, layout.machinesX + ALL_W) : '') +
     (layout.system ? pillsMarkup(a.system, layout.pillsX) : '') +
     `</g>`
   const source = svgOpen(baseWidth, BAND_H, layout.scale, 11) + inner + `</svg>`
@@ -308,7 +324,7 @@ export function bandSvg(a: BandInput, columns?: number): { source: string; alt: 
 
 export type BandPart =
   | { kind: 'picture'; source: string; alt: string; width: number; height: number }
-  | { kind: 'button'; key: string; label: string; panel: Panel | 'week' }
+  | { kind: 'button'; key: string; label: string; panel: Panel | 'week' | 'machines' }
 
 /**
  * The band as it is drawn on the desktop: windows onto the one picture, with a native text button
@@ -320,8 +336,9 @@ export function bandParts(band: ReturnType<typeof bandSvg>, sys: System | null):
   if (!band.width) return []
   const base = band.width / layout.scale
   const week = layout.panels.indexOf('week')
-  const slots: { x: number; label: string; key: string; panel: Panel | 'week' }[] = [
+  const slots: { x: number; label: string; key: string; panel: Panel | 'week' | 'machines' }[] = [
     ...(week < 0 ? [] : [{ x: PAD + week * (GROUP_FIXED + layout.barW + GROUP_GAP), label: 'W', key: 'usage-week', panel: 'week' as const }]),
+    ...(!layout.machines ? [] : [{ x: PAD + layout.machinesX, label: ALL_LABEL, key: 'usage-machines', panel: 'machines' as const }]),
     ...(!layout.system ? [] : systemPills(sys).flatMap((p, i) => p.enabled
       ? [{ x: PAD + layout.pillsX + i * (PILL_W + PILL_GAP) + PILL_TEXT, label: p.value, key: `usage-${p.panel}`, panel: p.panel }]
       : []))
@@ -392,6 +409,65 @@ function pillsMarkup(sys: System | null, x0: number): string {
       (p.enabled ? '' : `<text x="${x + PILL_TEXT}" y="10.5" fill="${FAINT}">${p.value}</text>`)
     )
   }).join('')
+}
+
+/** Each machine's name inside a ring filled to its load, the same ring as a pill; an off machine draws a dotted track. */
+function machinesMarkup(machines: MachineRing[], x0: number): string {
+  return machines.map((m, i) => {
+    const cx = x0 + i * (MACHINE_W + MACHINE_GAP) + PILL_R + 1
+    const cy = H / 2
+    const off = m.off || m.load === null
+    return (
+      (off
+        ? `<circle cx="${cx}" cy="${cy}" r="${PILL_R}" fill="none" stroke="${FAINT}" stroke-width="2" stroke-dasharray="2 2"/>`
+        : ring(cx, cy, PILL_R, m.load!, severityColor(m.load!), TRACK)) +
+      `<text x="${cx}" y="${cy + 3}" text-anchor="middle" font-size="${m.name.length > 2 ? 6 : 8}" fill="${off ? FAINT : INK}">${esc(m.name)}</text>`
+    )
+  }).join('')
+}
+
+/** Plain words for how long ago a reading came in. */
+export function ago(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  if (s < 15) return 'now'
+  if (s < 60) return `${s} s ago`
+  if (s < 3600) return `${Math.round(s / 60)} min ago`
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`
+  return `${Math.round(s / 86400)} d ago`
+}
+
+
+/** The All drawer: each machine on one line with its CPU, memory and disk bars and when it last reported. */
+export function machinesSvg(rows: MachineRow[], now: number, scale: number, maxWidth: number, stale: number): Card {
+  const width = maxWidth / scale
+  const nameW = 64
+  const seenW = 74
+  const cols = ['CPU', 'Memory', 'Disk']
+  const colW = Math.max(30, (width - PAD * 2 - nameW - seenW) / 3)
+  const rowH = 22
+  const top = PAD + 14
+  const parts: string[] = [`<line x1="${PAD}" y1="1" x2="${width - PAD}" y2="1" stroke="${TRACK}"/>`]
+  cols.forEach((c, i) => parts.push(`<text x="${PAD + nameW + i * colW}" y="${top}" font-size="11" fill="${FAINT}">${c}</text>`))
+  rows.forEach((r, j) => {
+    const y = top + 10 + j * rowH
+    const off = r.at === null || now - r.at > stale
+    parts.push(`<text x="${PAD}" y="${y + 9}" font-size="12" fill="${off ? FAINT : INK}">${esc(r.name)}</text>`)
+    ;[r.cpu, r.memory, r.disk].forEach((v, i) => {
+      const x = PAD + nameW + i * colW
+      const w = colW - 12
+      parts.push(`<rect x="${x}" y="${y + 3}" width="${w}" height="${BAR_H}" rx="${BAR_H / 2}" fill="${TRACK}"/>`)
+      if (!off && v !== null && v > 0) parts.push(`<rect x="${x}" y="${y + 3}" width="${Math.max(BAR_H, (w * v) / 100)}" height="${BAR_H}" rx="${BAR_H / 2}" fill="${severityColor(v)}"/>`)
+    })
+    const seen = r.at === null ? 'no reading yet' : off ? `off, ${ago(now - r.at)}` : ago(now - r.at)
+    parts.push(`<text x="${width - PAD}" y="${y + 9}" text-anchor="end" font-size="11" fill="${FAINT}">${seen}</text>`)
+  })
+  const height = top + 10 + rows.length * rowH + PAD / 2
+  const alt = rows.map(r => {
+    const off = r.at === null || now - r.at > stale
+    const p = (n: number | null) => (n === null ? 'no reading' : `${Math.round(n)}%`)
+    return off ? `${r.name} off` : `${r.name} CPU ${p(r.cpu)}, memory ${p(r.memory)}, disk ${p(r.disk)}`
+  }).join('; ') || 'No machines yet'
+  return { source: svgOpen(width, height, scale, 12) + parts.join('') + '</svg>', alt, width: maxWidth, height: height * scale }
 }
 
 /** Where each pressable pill sits in the band, in CSS px, for the invisible buttons laid over it. */

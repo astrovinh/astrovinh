@@ -1,3 +1,4 @@
 .ledger/
 .probe.jsonl
 .debug/
+machines.local.json

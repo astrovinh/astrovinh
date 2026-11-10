@@ -2,14 +2,16 @@
 
 A Claude Code mod that draws one row above the prompt, always visible:
 
-- **Day**: the 5-hour rate-limit window
-- **Week**: the 7-day rate-limit window
-- **Ctx**: the context window, stacked with one color per category
+- **W**: the 7-day rate-limit window (press it for reset times and today's spend)
+- **All**: one ring per machine you work on, filled to how busy it is now (the higher of CPU and memory)
+- **C, M, D**: this machine's CPU, memory and disk
 
-Limit bars turn amber at 60% and red at 85%. A second line shows reset times and the context legend.
+Bars and rings turn amber at 60% and red at 85%. A dotted ring means that machine has not reported for 90 seconds.
+
+On the desktop, the band shows W, All and C M D only. The terminal band still shows Day, Week and Ctx.
 
 On desktop, click the CPU, Mem or Disk pill to look at cleanup choices. On macOS, a separate button runs the action. Other systems keep the read-only view.
-The desktop band stays on one line at any width: the bars shrink first, then the dollar figure, then Ctx and Week drop. The C, M and D readings (CPU, memory, disk) always show.
+The desktop band stays on one line at any width: the bar shrinks first, then the dollar figure goes, then the machine rings. W and the C, M and D readings always show.
 
 ## Use it
 
@@ -19,6 +21,26 @@ Run Claude Code locally (terminal or desktop Code tab) with:
 
 Day and Week need a subscription plan; on an API key they show `n/a`.
 The band above the prompt draws on the terminal and desktop surfaces only.
+
+## Machines
+
+Press **All** to see every machine's CPU, memory and disk side by side, and when each last reported. Each machine is set up in its own `machines.local.json` beside the mod. Git ignores that file, so each machine keeps its own copy:
+
+    {
+      "name": "21",
+      "order": ["26", "21", "PC", "M4", "M2"],
+      "outbox": "/path/to/synced/from-this-machine",
+      "inbox": "/path/to/synced/folder-with-every-outbox",
+      "ssh": [{ "name": "PC", "host": "my-pc" }]
+    }
+
+- `name`: this machine's short label in its ring (two characters read best).
+- `order`: the rings, left to right. A machine that never reports shows as a dotted ring.
+- `outbox`: where this machine posts its reading every 10 seconds, to `<outbox>/machine-load/<name>.json`. Use a folder your sync tool sends to the other machines.
+- `inbox`: a folder whose subfolders are the outboxes. The mod reads `*/machine-load/*.json` one level down.
+- `ssh`: machines to ask directly every 30 seconds, for example ones that don't run Claude. The mod runs `ssh -o BatchMode=yes <host>` with a fixed read-only command, so it needs key login. The machine can be macOS or Linux.
+
+Without the file, the band shows no machine rings. Readings only travel as numbers: no process names, paths or files.
 
 ## Cleanup
 

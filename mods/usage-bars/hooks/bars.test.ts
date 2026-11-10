@@ -133,18 +133,21 @@ test('untilReset formats days, hours, minutes', () => {
   expect(untilReset('2026-10-02T00:20:00Z', now)).toBe('20m')
 })
 
-test('band shows a dash when a limit has no reading', () => {
-  const { source, alt } = bandSvg({ segments: [], contextPercent: null, spend: null, system: null, now: 0 })
-  expect(source.includes('>D<')).toBe(true)
+test('band shows a dash when Week has no reading, and draws no Day or Ctx', () => {
+  const { source, alt } = bandSvg({ day: { percentUsed: 50 }, segments: [{ name: 'Messages', tokens: 9, kind: 'used' }], contextPercent: 40, spend: null, system: null, now: 0 })
   expect(source.includes('>\u2013<')).toBe(true)
-  expect(alt).toBe('Day no reading, Week no reading, Context no reading')
+  expect(source).not.toContain('>D<')
+  expect(source).not.toContain('>Ctx<')
+  expect(source).not.toContain('>50%<')
+  expect(source).not.toContain('>40%<')
+  expect(alt).toBe('Week no reading')
 })
 
-test('band fills a limit bar in proportion, colored by severity', () => {
-  const { source } = bandSvg({ day: { percentUsed: 50 }, week: { percentUsed: 90 }, segments: [], contextPercent: null, spend: null, system: null, now: 0 })
+test('band fills the Week bar in proportion, colored by severity', () => {
+  const { source } = bandSvg({ week: { percentUsed: 50 }, segments: [], contextPercent: null, spend: null, system: null, now: 0 })
   expect(source.includes('<rect x="0" width="28" height="4" fill="#9ece6a"/>')).toBe(true)
-  expect(source.includes('fill="#f7768e"')).toBe(true)
   expect(source.includes('>50%<')).toBe(true)
+  expect(bandSvg({ week: { percentUsed: 90 }, segments: [], contextPercent: null, spend: null, system: null, now: 0 }).source).toContain('fill="#f7768e"')
 })
 
 test('hover is one line with day, week and today', () => {
@@ -270,14 +273,20 @@ test('desktop drawn width fits every pane, or is the pills alone at their smalle
   }
 })
 
-test('desktop fits one line: bars shrink first, then dollars, then panels, never the pills', () => {
+test('desktop fits one line: the bar shrinks first, then dollars, then the machine rings, never W or the pills', () => {
   expect(typeof desktop.desktopLayout).toBe('function')
-  expect(desktop.desktopLayout(160)).toMatchObject({ spend: true, system: true, barW: 56, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(98)).toMatchObject({ spend: true, system: true, barW: 35, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(78)).toMatchObject({ spend: false, system: true, barW: 15, panels: ['day', 'week', 'ctx'] })
-  expect(desktop.desktopLayout(70)).toMatchObject({ spend: false, system: true, panels: ['day', 'week'] })
-  expect(desktop.desktopLayout(50)).toMatchObject({ spend: false, system: true, panels: ['day'] })
-  expect(desktop.desktopLayout(30)).toMatchObject({ system: true, panels: [] })
+  expect(desktop.desktopLayout(160, true, true, 5)).toMatchObject({ spend: true, system: true, barW: 56, panels: ['week'], machines: 5 })
+  expect(desktop.desktopLayout(82, true, true, 5)).toMatchObject({ spend: true, panels: ['week'], machines: 5 })
+  expect(desktop.desktopLayout(81, true, true, 5)).toMatchObject({ spend: false, panels: ['week'], machines: 5 })
+  expect(desktop.desktopLayout(72, true, true, 5)).toMatchObject({ spend: false, panels: ['week'], machines: 5 })
+  expect(desktop.desktopLayout(71, true, true, 5)).toMatchObject({ spend: false, panels: ['week'], machines: 0 })
+  expect(desktop.desktopLayout(49, true, true, 5)).toMatchObject({ panels: ['week'], machines: 0 })
+  expect(desktop.desktopLayout(48, true, true, 5)).toMatchObject({ system: true, panels: [], machines: 0 })
+  for (let columns = 1; columns <= 300; columns++) {
+    const l = desktop.desktopLayout(columns, true, true, 5)
+    // Rings never come without W, and W never goes while a ring stays.
+    if (l.machines) expect(l.panels).toEqual(['week'])
+  }
   for (let columns = 1; columns <= 300; columns++) {
     const layout = desktop.desktopLayout(columns)
     expect(layout.system).toBe(true)
@@ -324,9 +333,9 @@ test('the hover area covers only the Week group', () => {
   const layout = desktopLayout(160)
   const hover = weekHover(layout)!
   const groupW = 24 + layout.barW + 5 + 30
-  expect(Math.round(hover.left)).toBe(Math.round((12 + groupW + 14) * layout.scale))
+  expect(Math.round(hover.left)).toBe(Math.round(12 * layout.scale))
   expect(Math.round(hover.width)).toBe(Math.round(groupW * layout.scale))
-  expect(weekHover(desktopLayout(50))).toBe(null)
+  expect(weekHover(desktopLayout(20))).toBe(null)
 })
 
 test('the band draws each pill letter in a severity ring, and only pills with a reading are pressable', () => {
@@ -347,4 +356,54 @@ test('band windows shift the drawing and keep every viewBox at 0 0', () => {
   expect(pictures.length).toBeGreaterThan(1)
   for (const pic of pictures) expect(pic.source).toMatch(/viewBox="0 0 /)
   expect(pictures.slice(1).every(pic => /translate\(-[\d.]+ 0\)/.test(pic.source))).toBe(true)
+})
+
+const rings = [
+  { name: '26', load: 22, off: false },
+  { name: '21', load: 72, off: false },
+  { name: 'PC', load: 91, off: false },
+  { name: 'M4', load: 20, off: false },
+  { name: 'M2', load: null, off: true }
+]
+
+test('machine rings are the same size as the C M D rings and carry no percent', () => {
+  const band = bandSvg({ ...input, week: { percentUsed: 64 }, machines: rings }, 160)
+  const radii = [...band.source.matchAll(/<circle [^>]*r="([\d.]+)"/g)].map(m => Number(m[1]))
+  expect(new Set(radii)).toEqual(new Set([7]))
+  for (const m of rings) expect(band.source).toContain(`>${m.name}</text>`)
+  for (const p of ['22%', '72%', '91%', '20%']) expect(band.source).not.toContain(`>${p}<`)
+  // The off machine draws a dotted track and no fill.
+  expect(band.source).toContain('stroke-dasharray="2 2"')
+  expect(band.alt).toBe('Week 64%, This week $1.0, 26 22%, 21 72%, PC 91%, M4 20%, M2 off, CPU 18%, Memory 71%, Disk 83%')
+})
+
+test('the All label is a native button between W and the pills, and the rings sit centred in that room', () => {
+  for (const columns of [72, 82, 120, 160, 300]) {
+    const band = bandSvg({ ...input, week: { percentUsed: 64 }, machines: rings }, columns)
+    const buttons = bars.bandParts(band, sys).filter(p => p.kind === 'button') as { label: string; panel: string }[]
+    expect(buttons.map(b => b.label)).toEqual(['W', 'All', '18%', '71%', '83%'])
+    expect(buttons[1]!.panel).toBe('machines')
+    const l = band.layout
+    const end = 24 + 5 + 30 + l.barW + (l.spend ? 14 + 48 : 0)
+    const left = l.machinesX - end
+    const right = l.pillsX - (l.machinesX + 22 + 5 * 16 + 4 * 7)
+    expect(Math.abs(left - right)).toBeLessThan(1)
+  }
+  const none = bandSvg({ ...input, week: { percentUsed: 64 } }, 160)
+  expect((bars.bandParts(none, sys).filter(p => p.kind === 'button') as { label: string }[]).map(b => b.label)).toEqual(['W', '18%', '71%', '83%'])
+})
+
+test('the All drawer lists each machine with its bars and when it last reported', () => {
+  const now = 1_000_000
+  const rows = [
+    { name: '26', cpu: 18, memory: 35, disk: 64, at: now - 2_000 },
+    { name: 'PC', cpu: 91, memory: 80, disk: 30, at: now - 40_000 },
+    { name: 'M2', cpu: 10, memory: 10, disk: 10, at: now - 7_200_000 },
+    { name: 'M4', cpu: null, memory: null, disk: null, at: null }
+  ]
+  const card = bars.machinesSvg(rows, now, 1.15, 600, 90_000)
+  expect(card.alt).toBe('26 CPU 18%, memory 35%, disk 64%; PC CPU 91%, memory 80%, disk 30%; M2 off; M4 off')
+  for (const t of ['now', '40 s ago', 'off, 2 h ago', 'no reading yet']) expect(card.source).toContain(`>${t}</text>`)
+  expect(card.width).toBe(600)
+  expect(card.source).toMatch(/viewBox="0 0 /)
 })

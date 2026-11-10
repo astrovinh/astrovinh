@@ -232,6 +232,33 @@ test('desktop pills open, switch, toggle and close the plain drawer through the 
   } finally { await ui.unmount() }
 })
 
+test('desktop All opens the machines drawer, and a pill closes it again', async ($, on) => {
+  const state = readings(on, 100_000)
+  state.system = { cpu: 18, cores: 8, memory: 71, memoryGb: 32, disk: { percent: 83, freeGb: 170 }, battery: null }
+  state.machines = [
+    { name: '26', cpu: 18, memory: 71, disk: 83, at: 99_000 },
+    { name: 'PC', cpu: 91, memory: 40, disk: 30, at: 60_000 },
+    { name: '21', cpu: 50, memory: 50, disk: 50, at: 9_000 },
+    { name: 'M2', cpu: null, memory: null, disk: null, at: null }
+  ]
+  state.machinesOpen = false
+  const ui = await $.ui.mount({ plugin: 'usage-bars', surface: 'desktop', component: 'AbovePrompt', props, viewport: { columns: 160, rows: 24 } })
+  try {
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text.trim())).toEqual(['W', 'All', '18%', '71%', '83%'])
+    // 21 last reported 91 s ago, past the 90 s limit, so it draws as off.
+    expect((await svgAlts(ui))[0]).toContain('26 71%, PC 91%, 21 off, M2 off')
+    await ui.press({ key: 'usage-machines' })
+    expect(state.machinesOpen).toBe(true)
+    await ui.redraw()
+    expect(await svgAlts(ui)).toContain('26 CPU 18%, memory 71%, disk 83%; PC CPU 91%, memory 40%, disk 30%; 21 off; M2 off')
+    await ui.press({ key: 'usage-cpu' })
+    expect(state.machinesOpen).toBe(false)
+    expect(state.panel).toBe('cpu')
+    await ui.redraw()
+    expect((await svgAlts(ui)).some(a => a.startsWith('26 CPU'))).toBe(false)
+  } finally { await ui.unmount() }
+})
+
 // Captured from the original hook in an isolated baseline copy, before desktop edits.
 // FNV-1a over the entire serialized tree pins every terminal node, prop and text byte.
 function terminalBytes(node: RenderNode): number {
